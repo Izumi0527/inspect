@@ -53,8 +53,12 @@ type SNMPMetrics struct {
 	BandwidthIn  *float64 `json:"bandwidth_in,omitempty"`  // 入站带宽，单位：bps（比特每秒）
 	BandwidthOut *float64 `json:"bandwidth_out,omitempty"` // 出站带宽，单位：bps（比特每秒）
 	// STP 保存生成树（BRIDGE-MIB dot1dStp）指标，用于巡检拓扑稳定性
-	STP        STPMetrics         `json:"stp,omitempty"`
-	Interfaces []InterfaceMetrics `json:"interfaces,omitempty"`
+	STP             STPMetrics              `json:"stp,omitempty"`
+	Stack           StackMetrics            `json:"stack,omitempty"`
+	ConfigSave      ConfigSaveMetrics       `json:"config_save,omitempty"`
+	VLAN            VLANMetrics             `json:"vlan,omitempty"`
+	FlashPartitions []FlashPartitionMetrics `json:"flash_partitions,omitempty"`
+	Interfaces      []InterfaceMetrics      `json:"interfaces,omitempty"`
 	// Disks 是主机的固定磁盘分区（HOST-RESOURCES-MIB hrStorageFixedDisk），服务器巡检使用；
 	// 网络设备不实现该表，恒为空。
 	Disks          []DiskMetrics              `json:"disks,omitempty"`
@@ -124,6 +128,11 @@ type STPMetrics struct {
 	ProtocolSpec            *int64 `json:"protocol_spec,omitempty"`
 	TimeSinceTopologyChange *int64 `json:"time_since_topology_change,omitempty"` // 单位：秒
 	TopChanges              *int64 `json:"top_changes,omitempty"`
+	Priority                *int64 `json:"priority,omitempty"`
+	DesignatedRoot          string `json:"designated_root,omitempty"`
+	RootCost                *int64 `json:"root_cost,omitempty"`
+	RootPort                *int64 `json:"root_port,omitempty"`
+	BpduGuard               *int64 `json:"bpdu_guard,omitempty"`
 }
 
 // BGPNeighborMetrics 保存通过厂商扩展 MIB 采集到的 BGP 邻居摘要。
@@ -140,6 +149,8 @@ type OpticalTransceiverMetrics struct {
 	Index           string   `json:"index"`
 	Name            string   `json:"name,omitempty"`
 	VendorSN        string   `json:"vendor_sn,omitempty"`
+	Temperature     *float64 `json:"temperature,omitempty"`
+	TemperatureUnit string   `json:"temperature_unit,omitempty"`
 	Voltage         *float64 `json:"voltage,omitempty"`
 	VoltageUnit     string   `json:"voltage_unit,omitempty"`
 	BiasCurrent     *float64 `json:"bias_current,omitempty"`
@@ -167,6 +178,7 @@ type ComponentStatusMetrics struct {
 // PoEPortMetrics 保存单个 PoE 端口的供电数据。
 type PoEPortMetrics struct {
 	Index          string   `json:"index"`
+	Name           string   `json:"name,omitempty"`
 	ConsumingPower *float64 `json:"consuming_power,omitempty"`
 	PeakPower      *float64 `json:"peak_power,omitempty"`
 	Unit           string   `json:"unit,omitempty"`
@@ -403,6 +415,7 @@ func (c *SNMPCollector) CollectMetrics(
 
 	// 采集生成树 STP 拓扑指标（BRIDGE-MIB dot1dStp）
 	c.collectSTP(client, metrics, registry)
+	c.collectSwitchExtendedMetrics(client, metrics, registry, vendor, sysObjectID, sysDescr, diag)
 	if c.logger != nil && (metrics.STP.ProtocolSpec != nil || metrics.STP.TimeSinceTopologyChange != nil || metrics.STP.TopChanges != nil) {
 		c.logger.Debug("collected stp",
 			zap.Int64p("protocol_spec", metrics.STP.ProtocolSpec),
@@ -507,6 +520,11 @@ func (c *SNMPCollector) collectSTP(
 	if oid := strings.TrimSpace(registry.Common.BridgeSTP.StpTopChanges.OID); oid != "" {
 		metrics.STP.TopChanges = readNumericScalar(target, oid)
 	}
+	stp := registry.Common.BridgeSTP
+	metrics.STP.Priority = readNumericScalar(target, stp.StpPriority.OID)
+	metrics.STP.DesignatedRoot = readSTPBridgeID(target, stp.StpDesignatedRoot.OID)
+	metrics.STP.RootCost = readNumericScalar(target, stp.StpRootCost.OID)
+	metrics.STP.RootPort = readNumericScalar(target, stp.StpRootPort.OID)
 }
 
 // readNumericScalar 读取单个数值型标量 OID（Integer 或 Counter32）；取不到返回 nil。
@@ -969,12 +987,13 @@ func (c *SNMPCollector) collectComponentsWithDeviceContext(
 	if registry != nil {
 		effectiveVendor = registry.ResolveVendorByContext(vendor, sysObjectID, sysDescr)
 	}
+	envEntries := registry.CatalogEntriesForDevice(vendor, "environment", sysObjectID, sysDescr)
 	raw := collectComponentsFromCatalogWithDiagnostics(
 		target,
-		registry.CatalogEntriesForDevice(vendor, "environment", sysObjectID, sysDescr),
+		envEntries,
 		diag,
 	)
-	metrics.Components = enrichComponents(raw, effectiveVendor, catalog)
+	metrics.Components = enrichComponentsWithFaultLights(target, enrichComponents(raw, effectiveVendor, catalog), envEntries)
 }
 
 // collectPoE 采集 PoE 供电概况（catalog 分类 poe）。非 PoE 设备返回零值。
@@ -2187,11 +2206,17 @@ func isValidOpticalReading(val *float64, unit string) bool {
 	return *val > 0
 }
 
+func isValidOpticalTemperature(temp *float64) bool {
+	return temp != nil && !math.IsNaN(*temp) && !math.IsInf(*temp, 0) &&
+		*temp > -50 && *temp < 150 && *temp != 0 && *temp != snmpPercentInvalidSentinel
+}
+
 func hasActiveOpticalReading(item OpticalTransceiverMetrics) bool {
 	return isValidOpticalReading(item.Voltage, item.VoltageUnit) ||
 		isValidOpticalReading(item.BiasCurrent, item.BiasCurrentUnit) ||
 		isValidOpticalReading(item.TxPower, item.TxPowerUnit) ||
-		isValidOpticalReading(item.RxPower, item.RxPowerUnit)
+		isValidOpticalReading(item.RxPower, item.RxPowerUnit) ||
+		isValidOpticalTemperature(item.Temperature)
 }
 
 func lookupOpticalEntityName(catalog *entityCatalog, idx int) string {
@@ -3172,7 +3197,7 @@ func collectOpticalTransceiversFromCatalogWithDiagnostics(
 
 	indexes := make([]string, 0, len(items))
 	for index, item := range items {
-		if item.TxPower == nil && item.RxPower == nil && item.BiasCurrent == nil && item.Voltage == nil {
+		if item.TxPower == nil && item.RxPower == nil && item.BiasCurrent == nil && item.Voltage == nil && item.Temperature == nil {
 			continue
 		}
 		indexes = append(indexes, index)
@@ -3301,6 +3326,9 @@ func collectPoEFromCatalogWithDiagnostics(
 
 	ports := make(map[string]*PoEPortMetrics)
 	order := make([]string, 0)
+	var slotAvailSum float64
+	var slotAvailUnit string
+	hasSlotAvail := false
 
 	for _, entry := range entries {
 		oid := strings.TrimSpace(entry.OID)
@@ -3308,10 +3336,12 @@ func collectPoEFromCatalogWithDiagnostics(
 			continue
 		}
 		normalizedID := normalizeCollectorToken(entry.ID)
+		isPortName := strings.Contains(normalizedID, "port_name")
+		isSlotAvail := strings.Contains(normalizedID, "slot_available_power")
 		isRemaining := strings.Contains(normalizedID, "remaining")
 		isPeakPower := strings.Contains(normalizedID, "peak_power")
-		isConsumingPower := !isRemaining && !isPeakPower && strings.Contains(normalizedID, "power")
-		if !isRemaining && !isPeakPower && !isConsumingPower {
+		isConsumingPower := !isRemaining && !isPeakPower && !isSlotAvail && !isPortName && strings.Contains(normalizedID, "power")
+		if !isRemaining && !isPeakPower && !isConsumingPower && !isSlotAvail && !isPortName {
 			continue
 		}
 
@@ -3324,12 +3354,32 @@ func collectPoEFromCatalogWithDiagnostics(
 		}
 
 		for _, variable := range result {
+			index := extractOIDIndexSuffix(variable.Name, oid)
+			if index == "" {
+				index = strings.TrimSpace(variable.Name)
+			}
+			if isPortName {
+				if name := SanitizeInterfaceDescription(decodeSNMPTextValue(variable.Value)); name != "" {
+					if ports[index] == nil {
+						ports[index] = &PoEPortMetrics{Index: index}
+						order = append(order, index)
+					}
+					ports[index].Name = name
+				}
+				continue
+			}
 			value, ok := numericPDUValue(variable)
 			if !ok || value < 0 {
 				continue
 			}
 			normalizedValue, normalizedUnit := normalizeCatalogNumericValue(value, entry.Unit)
 
+			if isSlotAvail {
+				slotAvailSum += normalizedValue
+				slotAvailUnit = normalizedUnit
+				hasSlotAvail = true
+				continue
+			}
 			// 剩余保障功率是设备级指标，不归属任何端口
 			if isRemaining {
 				v := normalizedValue
@@ -3338,10 +3388,6 @@ func collectPoEFromCatalogWithDiagnostics(
 				continue
 			}
 
-			index := extractOIDIndexSuffix(variable.Name, oid)
-			if index == "" {
-				index = strings.TrimSpace(variable.Name)
-			}
 			port := ports[index]
 			if port == nil {
 				port = &PoEPortMetrics{Index: index}
@@ -3360,6 +3406,11 @@ func collectPoEFromCatalogWithDiagnostics(
 		}
 	}
 
+	if metrics.RemainingPower == nil && hasSlotAvail {
+		v := slotAvailSum
+		metrics.RemainingPower = &v
+		metrics.RemainingUnit = slotAvailUnit
+	}
 	if len(order) > 0 {
 		sort.Strings(order)
 		metrics.Ports = make([]PoEPortMetrics, 0, len(order))
@@ -3438,6 +3489,12 @@ func applyOpticalCatalogValue(
 	normalizedValue, normalizedUnit := normalizeCatalogNumericValue(value, entry.Unit)
 
 	switch {
+	case strings.Contains(normalizedID, "temperature"):
+		if value > -50 && value < 150 && value != 255 {
+			temp := value
+			item.Temperature = &temp
+			item.TemperatureUnit = "C"
+		}
 	case strings.Contains(normalizedID, "tx_power"):
 		item.TxPower = &normalizedValue
 		item.TxPowerUnit = normalizedUnit

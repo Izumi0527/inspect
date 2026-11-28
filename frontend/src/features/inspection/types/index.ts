@@ -160,12 +160,13 @@ export interface InspectionCheckItem {
   /**
    * SNMP 指标键，type=snmp 时用于后端分派。改名不影响分派。
    *
-   * 基础：reachable / system_info / cpu / memory / temperature / uptime /
+   * 基础：reachable / system_info / cpu / memory / flash_usage / temperature / uptime /
    *       interface / interface_utilization / bandwidth
    * 接口健康：interface_errors / interface_discards / interface_broadcast /
    *           interface_admin_status / interface_duplex（标准 IF-MIB 与 EtherLike-MIB，全厂商通用）
-   * 部件与专项：fan_status / power_status / poe / optical_power / bgp_peers /
-   *             lldp_neighbors / stp_status / firmware_version（依赖厂商 catalog 或标准 MIB，采不到时判 skip）
+   * 部件与专项：board_status / fan_status / power_status / stack_status / poe / optical_power /
+   *             bgp_peers / vlan_status / lldp_neighbors / stp_status / config_save_status /
+   *             firmware_version（依赖厂商 catalog 或标准 MIB，采不到时判 skip）
    * 主机专项：disk_usage（HOST-RESOURCES-MIB，服务器模板使用）
    */
   metric?: string
@@ -261,6 +262,7 @@ export interface CheckResult {
 /** 单个接口的利用率明细 */
 export interface InterfaceUtilizationEntry {
   name: string
+  alias?: string
   /** 取值更高的方向："入" 或 "出" */
   direction: string
   percent: number
@@ -303,6 +305,7 @@ export type CheckDetailVerdict = 'pass' | 'warning' | 'fail' | 'skip'
 /** 单接口的计数器比率明细（错包 / 丢弃共用） */
 export interface InterfaceRatioEntry {
   name: string
+  alias?: string
   /** 比率更高的方向："入" 或 "出" */
   direction: string
   percent: number
@@ -339,11 +342,15 @@ export interface InterfaceRatioDetails {
  */
 export interface OpticalModuleEntry {
   index: string
+  name?: string
+  vendor_sn?: string
   verdict: CheckDetailVerdict
   rx_power: number
   rx_power_unit: string
   tx_power?: number
   tx_power_unit?: string
+  temperature?: number
+  temperature_unit?: string
   voltage?: number
   voltage_unit?: string
   bias_current?: number
@@ -387,16 +394,18 @@ export interface BGPPeersDetails {
   peers: BGPPeerEntry[]
 }
 
-/** 单部件（风扇 / 电源）明细，state 是厂商原始状态码 */
+/** 单部件（风扇 / 电源 / 单板）明细，state 是厂商原始状态码 */
 export interface ComponentStatusEntry {
   index: string
+  name?: string
   kind: string
   verdict: CheckDetailVerdict
   state?: number
+  status_label?: string
 }
 
 /**
- * 风扇 / 电源状态明细。
+ * 风扇 / 电源 / 单板状态明细。
  *
  * normal_states / abnormal_states 回显本次生效的判定依据：状态码语义因厂商
  * 甚至型号而异，只给「码 77，未知」运维无从下手，连同判定集合一起给出，
@@ -473,6 +482,8 @@ export interface LLDPNeighborsDetails {
 export interface PoEPortEntry {
   /** 端口索引/编号 */
   index: string
+  /** 端口名称 */
+  name?: string
   /** 当前消耗功率（单位通常为 W） */
   consuming_power?: number
   /** 峰值功率（单位通常为 W） */
@@ -508,6 +519,80 @@ export interface PoEDetails {
   ports: PoEPortEntry[]
 }
 
+/** 堆叠成员信息 */
+export interface StackStatusMember {
+  id: string
+  role: string
+  priority?: number
+  mac?: string
+  verdict: CheckDetailVerdict
+}
+
+/** 堆叠链路端口信息 */
+export interface StackStatusPort {
+  name: string
+  status: string
+  verdict: CheckDetailVerdict
+}
+
+/** 堆叠与集群状态明细 */
+export interface StackStatusDetails {
+  kind: 'stack_status'
+  enabled: boolean
+  standalone: boolean
+  topology: string
+  member_count: number
+  port_up_count: number
+  port_down_count: number
+  members: StackStatusMember[]
+  ports: StackStatusPort[]
+}
+
+/** 接口状态一致性 / 半双工异常明细条目 */
+export interface InterfaceStatusEntry {
+  name: string
+  alias?: string
+  speed_mbps?: number
+  status_label: string
+  duplex_label?: string
+  verdict: CheckDetailVerdict
+  reason: string
+}
+
+/** 接口状态一致性与双工模式异常明细 */
+export interface InterfaceStatusDetails {
+  kind: 'interface_status_detail'
+  sub_kind: 'admin_status' | 'duplex'
+  total_evaluated: number
+  abnormal_count: number
+  admin_down_count?: number
+  idle_count?: number
+  entries: InterfaceStatusEntry[]
+}
+
+/** Flash 存储分区明细条目 */
+export interface FlashUsagePartition {
+  name: string
+  total_bytes: number
+  used_bytes: number
+  free_bytes: number
+  percent: number
+  verdict: CheckDetailVerdict
+}
+
+/** Flash 存储使用率明细 */
+export interface FlashUsageDetails {
+  kind: 'flash_usage'
+  total: number
+  evaluated: number
+  over_warning: number
+  over_critical: number
+  warning_threshold: number
+  critical_threshold: number
+  partitions: FlashUsagePartition[]
+  skipped: InterfaceUtilizationSkipped[]
+}
+
 /**
  * 检查项结构化明细。
  *
@@ -523,6 +608,9 @@ export type CheckResultDetails =
   | DiskUsageDetails
   | LLDPNeighborsDetails
   | PoEDetails
+  | StackStatusDetails
+  | InterfaceStatusDetails
+  | FlashUsageDetails
 
 /**
  * 设备巡检结果接口

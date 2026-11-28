@@ -457,7 +457,8 @@ func (s *Service) BackfillInspectionDeviceSnapshots(ctx context.Context) (int64,
 func snapshotDevicesIntoInspections(db *gorm.DB, scope string, args ...interface{}) *gorm.DB {
 	return db.Exec(`UPDATE inspections AS i SET device_snapshot = jsonb_build_object(`+
 		`'name', d.name, 'ip_address', d.ip_address, 'device_type', d.device_type, 'vendor', d.vendor, `+
-		`'model', d.model, 'firmware_version', d.firmware_version, 'uptime', d.uptime) `+
+		`'model', d.model, 'firmware_version', d.firmware_version, 'uptime', d.uptime, `+
+		`'serial_number', d.serial_number, 'location', d.location) `+
 		`FROM devices AS d WHERE d.id = i.device_id AND `+scope, args...)
 }
 

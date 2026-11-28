@@ -32,14 +32,17 @@ func describeInspectionThresholdPolicy(data reports.InspectionReportData) string
 //go:linkname buildInspectionNarrative github.com/your-org/inspect-system/backend-go/internal/reports.buildInspectionNarrative
 func buildInspectionNarrative(data reports.InspectionReportData) []string
 
-// allDimensionCheckItems 覆盖全部 20 个可采集维度：1 项 ICMP 连通性 + 19 项 SNMP。
+// allDimensionCheckItems 覆盖全部 28 个可采集维度：1 项 ICMP 连通性 + 27 项 SNMP。
 const allDimensionCheckItems = `[
 	{"id":"connectivity","type":"icmp"},
 	{"id":"reachable","type":"snmp","metric":"reachable"},
 	{"id":"cpu","type":"snmp","metric":"cpu"},
 	{"id":"memory","type":"snmp","metric":"memory"},
+	{"id":"flash_usage","type":"snmp","metric":"flash_usage"},
+	{"id":"board_status","type":"snmp","metric":"board_status"},
 	{"id":"fan","type":"snmp","metric":"fan_status"},
 	{"id":"power","type":"snmp","metric":"power_status"},
+	{"id":"stack_status","type":"snmp","metric":"stack_status"},
 	{"id":"temperature","type":"snmp","metric":"temperature"},
 	{"id":"uptime","type":"snmp","metric":"uptime"},
 	{"id":"interface","type":"snmp","metric":"interface"},
@@ -52,9 +55,11 @@ const allDimensionCheckItems = `[
 	{"id":"poe","type":"snmp","metric":"poe"},
 	{"id":"optical","type":"snmp","metric":"optical_power"},
 	{"id":"bgp","type":"snmp","metric":"bgp_peers"},
+	{"id":"vlan_status","type":"snmp","metric":"vlan_status"},
 	{"id":"firmware","type":"snmp","metric":"firmware_version"},
 	{"id":"lldp","type":"snmp","metric":"lldp_neighbors"},
 	{"id":"stp","type":"snmp","metric":"stp_status"},
+	{"id":"config_save_status","type":"snmp","metric":"config_save_status"},
 	{"id":"broadcast","type":"snmp","metric":"interface_broadcast"},
 	{"id":"disk","type":"snmp","metric":"disk_usage"}
 ]`
@@ -149,16 +154,16 @@ func TestCoverage_LegacyMultiTypeTemplateUsesUnion(t *testing.T) {
 	}
 }
 
-// TestCoverage_UntypedTemplateUsesAllDimensions 未声明设备类型的存量模板以全部 23 个维度为全集。
+// TestCoverage_UntypedTemplateUsesAllDimensions 未声明设备类型的存量模板以全部 28 个维度为全集。
 func TestCoverage_UntypedTemplateUsesAllDimensions(t *testing.T) {
 	covered, uncovered := summarizeTemplateCoverage([]byte(allDimensionCheckItems), nil)
-	if len(uncovered) != 0 || len(covered) != 23 {
-		t.Errorf("全部维度模板应覆盖 23 项，实际 covered=%d uncovered=%v", len(covered), uncovered)
+	if len(uncovered) != 0 || len(covered) != 28 {
+		t.Errorf("全部维度模板应覆盖 28 项，实际 covered=%d uncovered=%v", len(covered), uncovered)
 	}
 
 	covered, uncovered = summarizeTemplateCoverage([]byte(connectivityTemplateCheckItems), nil)
-	if len(covered) != 2 || len(uncovered) != 21 {
-		t.Errorf("连通性模板应覆盖 2 项、未覆盖 21 项，实际 %d/%d", len(covered), len(uncovered))
+	if len(covered) != 2 || len(uncovered) != 26 {
+		t.Errorf("连通性模板应覆盖 2 项、未覆盖 26 项，实际 %d/%d", len(covered), len(uncovered))
 	}
 	// 未覆盖清单必须给中文维度名，不能是 metric 键
 	for _, label := range uncovered {

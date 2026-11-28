@@ -38,6 +38,18 @@ type CommonSection struct {
 	// BridgeSTP 是 RFC 1493 (BRIDGE-MIB) 的生成树 OID，交换机巡检使用；
 	// 标量 OID，单次 GET 即可读取。
 	BridgeSTP BridgeSTPSection `json:"bridge_stp"`
+	// QBridge 是 BRIDGE-MIB / Q-BRIDGE-MIB 的交换机 VLAN 与转发表 OID。
+	QBridge QBridgeSection `json:"q_bridge"`
+}
+
+// QBridgeSection 承载 BRIDGE-MIB / Q-BRIDGE-MIB 的端口数、VLAN 容量及 FDB 动态表项 OID。
+type QBridgeSection struct {
+	Dot1dBaseNumPorts      OIDDefinition `json:"dot1d_base_num_ports"`
+	Dot1qMaxVlanID         OIDDefinition `json:"dot1q_max_vlan_id"`
+	Dot1qMaxSupportedVlans OIDDefinition `json:"dot1q_max_supported_vlans"`
+	Dot1qNumVlans          OIDDefinition `json:"dot1q_num_vlans"`
+	Dot1qGvrpStatus        OIDDefinition `json:"dot1q_gvrp_status"`
+	Dot1qFdbDynamicCount   OIDDefinition `json:"dot1q_fdb_dynamic_count"`
 }
 
 // BridgeSTPSection 承载 RFC 1493 (BRIDGE-MIB) 的 dot1dStp 标量 OID。
@@ -45,6 +57,10 @@ type BridgeSTPSection struct {
 	StpProtocolSpec            OIDDefinition `json:"stp_protocol_spec"`
 	StpTimeSinceTopologyChange OIDDefinition `json:"stp_time_since_topology_change"`
 	StpTopChanges              OIDDefinition `json:"stp_top_changes"`
+	StpPriority                OIDDefinition `json:"stp_priority"`
+	StpDesignatedRoot          OIDDefinition `json:"stp_designated_root"`
+	StpRootCost                OIDDefinition `json:"stp_root_cost"`
+	StpRootPort                OIDDefinition `json:"stp_root_port"`
 }
 
 // HostResourcesSection 承载主机资源 OID。各项均可选，为空时采集端跳过。

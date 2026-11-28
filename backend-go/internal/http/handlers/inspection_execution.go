@@ -826,11 +826,10 @@ func (h InspectionHandler) executeSNMPCheck(result *inspection.Result, probeResu
 		return
 	}
 
-	// 获取配置中的阈值
+	// 获取配置中的阈值（保留字段存在性，避免合法的 0 阈值被默认值覆盖导致下限型阈值反转）
 	config, _ := checkItem["config"].(map[string]interface{})
-	threshold, _ := config["threshold"].(map[string]interface{})
-	warningThreshold, _ := threshold["warning"].(float64)
-	criticalThreshold, _ := threshold["critical"].(float64)
+	bounds := parseThresholdBounds(config)
+	warningThreshold, criticalThreshold := bounds.warning, bounds.critical
 
 	// 按检查项的 metric 字段分派到具体指标（稳定键，不再依赖中文名称关键词，改名不影响分派）。
 	metric := strings.ToLower(strings.TrimSpace(readString(checkItem, "metric")))
@@ -859,10 +858,20 @@ func (h InspectionHandler) executeSNMPCheck(result *inspection.Result, probeResu
 		h.checkComponentStatusMetric(result, snmpMetrics, config, "fan", "风扇")
 	case "power_status":
 		h.checkComponentStatusMetric(result, snmpMetrics, config, "power", "电源")
+	case "board_status":
+		h.checkComponentStatusMetric(result, snmpMetrics, config, "board", "单板")
+	case "stack_status":
+		h.checkStackStatusMetric(result, snmpMetrics)
+	case "config_save_status":
+		h.checkConfigSaveStatusMetric(result, snmpMetrics)
+	case "vlan_status":
+		h.checkVLANStatusMetric(result, snmpMetrics, bounds)
+	case "flash_usage":
+		h.checkFlashUsageMetric(result, snmpMetrics, bounds)
 	case "poe":
-		h.checkPoEMetric(result, snmpMetrics, warningThreshold, criticalThreshold)
+		h.checkPoEMetric(result, snmpMetrics, bounds)
 	case "optical_power":
-		h.checkOpticalPowerMetric(result, snmpMetrics, warningThreshold, criticalThreshold)
+		h.checkOpticalPowerMetric(result, snmpMetrics, config, bounds)
 	case "bgp_peers":
 		h.checkBGPPeersMetric(result, snmpMetrics)
 	case "firmware_version":
@@ -872,7 +881,7 @@ func (h InspectionHandler) executeSNMPCheck(result *inspection.Result, probeResu
 	case "lldp_neighbors":
 		h.checkLLDPNeighborsMetric(result, snmpMetrics, config)
 	case "stp_status":
-		h.checkSTPStatusMetric(result, snmpMetrics, warningThreshold, criticalThreshold)
+		h.checkSTPStatusMetric(result, snmpMetrics, bounds)
 	case "interface_broadcast":
 		h.checkInterfaceBroadcastMetric(result, snmpMetrics, warningThreshold, criticalThreshold)
 	case "bandwidth":
@@ -1140,6 +1149,7 @@ const utilizationTopOffenderLimit = 3
 // interfaceUtilizationEntry 单个接口的利用率快照，取入/出方向中更高的一侧。
 type interfaceUtilizationEntry struct {
 	Name       string   `json:"name"`
+	Alias      string   `json:"alias,omitempty"`
 	Direction  string   `json:"direction"` // "入" 或 "出"
 	Percent    float64  `json:"percent"`
 	SpeedMbps  int64    `json:"speed_mbps"`
@@ -1223,6 +1233,7 @@ func summarizeInterfaceUtilization(interfaces []devices.InterfaceMetrics, warnin
 		capacityBps := float64(*iface.Speed) * 1_000_000
 		entry := interfaceUtilizationEntry{
 			Name:       name,
+			Alias:      trimmedPortDescription(iface),
 			Percent:    -1,
 			SpeedMbps:  *iface.Speed,
 			InRateBps:  iface.InRate,
@@ -1455,19 +1466,23 @@ func containsFloat(list []float64, want float64) bool {
 // State 保留厂商原始状态码——报告要能展示「码 77」这个事实本身，
 // 运维据此才能校准模板配置。
 type componentStatusEntry struct {
-	Index   string `json:"index"`
-	Kind    string `json:"kind"`
-	Verdict string `json:"verdict"`
-	State   *int64 `json:"state,omitempty"`
+	Index       string `json:"index"`
+	Name        string `json:"name,omitempty"`
+	Kind        string `json:"kind"`
+	Verdict     string `json:"verdict"`
+	State       *int64 `json:"state,omitempty"`
+	StatusLabel string `json:"status_label,omitempty"`
 }
 
 // componentStatusSummary 单类部件（风扇或电源）的状态汇总。
 type componentStatusSummary struct {
 	Total           int
 	Normal          int
+	Warning         int
 	Abnormal        int
 	Unknown         int
 	AbnormalIndexes []string
+	WarningIndexes  []string
 	UnknownCodes    []string
 	Entries         []componentStatusEntry
 }
@@ -1480,21 +1495,34 @@ func summarizeComponentStatus(
 	components []devices.ComponentStatusMetrics,
 	kind string,
 	normalStates, abnormalStates []float64,
+	useStatusLevel bool,
 ) componentStatusSummary {
 	summary := componentStatusSummary{
 		AbnormalIndexes: make([]string, 0),
+		WarningIndexes:  make([]string, 0),
 		UnknownCodes:    make([]string, 0),
 	}
 	entries := make([]componentStatusEntry, 0, len(components))
 
 	for _, component := range components {
-		if component.Kind != kind || component.State == nil {
+		if component.Kind != kind {
+			continue
+		}
+		if component.State == nil && (!useStatusLevel || component.StatusLevel == "") {
 			continue
 		}
 		summary.Total++
-		state := float64(*component.State)
-		entry := componentStatusEntry{Index: component.Index, Kind: component.Kind, State: component.State}
+		entry := componentStatusEntry{
+			Index: component.Index, Name: strings.TrimSpace(component.Name),
+			Kind: component.Kind, State: component.State, StatusLabel: strings.TrimSpace(component.StatusLabel),
+		}
 
+		if useStatusLevel && component.StatusLevel != "" && applyComponentStatusLevel(component, &entry, &summary) {
+			entries = append(entries, entry)
+			continue
+		}
+
+		state := float64(*component.State)
 		switch {
 		case containsFloat(normalStates, state):
 			summary.Normal++
@@ -1533,6 +1561,7 @@ func buildComponentStatusDetails(
 		"label":           label,
 		"total":           summary.Total,
 		"normal":          summary.Normal,
+		"warning":         summary.Warning,
 		"abnormal":        summary.Abnormal,
 		"unknown":         summary.Unknown,
 		"normal_states":   normalStates,
@@ -1545,7 +1574,7 @@ func buildComponentStatusDetails(
 	return encodeDetailsPayload(payload)
 }
 
-// checkComponentStatusMetric 是风扇与电源检查的共同实现。
+// checkComponentStatusMetric 是风扇、电源与单板检查的共同实现。
 func (h InspectionHandler) checkComponentStatusMetric(
 	result *inspection.Result,
 	metrics *devices.SNMPMetrics,
@@ -1562,7 +1591,8 @@ func (h InspectionHandler) checkComponentStatusMetric(
 		return
 	}
 
-	summary := summarizeComponentStatus(metrics.Components, kind, normalStates, abnormalStates)
+	useStatusLevel := !hasCustomComponentStateConfig(config)
+	summary := summarizeComponentStatus(metrics.Components, kind, normalStates, abnormalStates, useStatusLevel)
 	result.Details = buildComponentStatusDetails(summary, kind, label, normalStates, abnormalStates)
 
 	total, normal, abnormal, unknown := summary.Total, summary.Normal, summary.Abnormal, summary.Unknown
@@ -1575,6 +1605,9 @@ func (h InspectionHandler) checkComponentStatusMetric(
 	}
 
 	actual := fmt.Sprintf("共 %d 个%s：正常 %d，异常 %d，状态码未知 %d", total, label, normal, abnormal, unknown)
+	if summary.Warning > 0 {
+		actual = fmt.Sprintf("共 %d 个%s：正常 %d，告警 %d，异常 %d，状态码未知 %d", total, label, normal, summary.Warning, abnormal, unknown)
+	}
 	result.ActualValue = &actual
 
 	if abnormal > 0 {
@@ -1586,11 +1619,22 @@ func (h InspectionHandler) checkComponentStatusMetric(
 
 	// 全部落在未知码上时不作判定：状态码语义未经实测确认，猜正常等于把故障
 	// 设备报成健康。显式判 skip 并给出原始码，让运维据此校准模板配置。
-	if normal == 0 && unknown > 0 {
+	if normal == 0 && summary.Warning == 0 && unknown > 0 {
 		result.Status = "skip"
 		result.Message = stringPtr(fmt.Sprintf(
 			"%s状态码不在已知集合内，无法判定：%s；请按设备实际取值在模板中配置 normal_states / abnormal_states",
 			label, strings.Join(unknownCodes, "、")))
+		return
+	}
+
+	if summary.Warning > 0 || (kind == "power" && total >= 2 && normal < total) {
+		result.Status = "warning"
+		if kind == "power" {
+			result.Message = stringPtr(fmt.Sprintf("电源冗余降级（共 %d 个电源，正常 %d 个），请检查备用/休眠电源及供电线路", total, normal))
+			return
+		}
+		result.Message = stringPtr(fmt.Sprintf("%d 个%s存在告警状态（%s），请现场核查",
+			summary.Warning, label, strings.Join(summary.WarningIndexes, "、")))
 		return
 	}
 
@@ -1654,13 +1698,8 @@ func buildPoEDetails(ports []devices.PoEPortMetrics, remainingPower *float64, re
 // 分厂商降级：H3C 上报 PSE 剩余保障功率，可直接判定「还能不能再接设备」；
 // 华为只上报端口消耗功率、没有系统额定总功率，算不出使用率，此时退化为纯展示
 // ——硬判会是无根据的猜测。定位与「带宽吞吐量」项相同。
-func (h InspectionHandler) checkPoEMetric(result *inspection.Result, metrics *devices.SNMPMetrics, warning, critical float64) {
-	if warning == 0 {
-		warning = 30
-	}
-	if critical == 0 {
-		critical = 10
-	}
+func (h InspectionHandler) checkPoEMetric(result *inspection.Result, metrics *devices.SNMPMetrics, bounds thresholdBounds) {
+	warning, critical := bounds.resolve(30, 10)
 	result.ExpectedValue = stringPtr(fmt.Sprintf("PSE 剩余保障功率 > %gW（警告 <=%gW，故障 <=%gW）", warning, warning, critical))
 	result.Details = buildThresholdDetails("poe", warning, critical, "W")
 
@@ -1679,6 +1718,7 @@ func (h InspectionHandler) checkPoEMetric(result *inspection.Result, metrics *de
 		}
 	}
 
+	topPortSuffix := formatPoETopPortSuffix(metrics.PoE.Ports)
 	if metrics.PoE.RemainingPower == nil {
 		// 只有端口功率：纯展示
 		result.ExpectedValue = stringPtr("仅采集展示（该设备未上报 PSE 剩余保障功率，无法计算供电余量）")
@@ -1686,7 +1726,7 @@ func (h InspectionHandler) checkPoEMetric(result *inspection.Result, metrics *de
 		result.ActualValue = &actual
 		result.Status = "pass"
 		result.Message = stringPtr(fmt.Sprintf(
-			"已采集 %d 个 PoE 端口功率；该设备未上报剩余保障功率，无法判定供电余量，仅作展示", len(metrics.PoE.Ports)))
+			"已采集 %d 个 PoE 端口功率；该设备未上报剩余保障功率，无法判定供电余量，仅作展示%s", len(metrics.PoE.Ports), topPortSuffix))
 		return
 	}
 
@@ -1702,16 +1742,16 @@ func (h InspectionHandler) checkPoEMetric(result *inspection.Result, metrics *de
 	case remaining <= critical:
 		result.Status = "fail"
 		result.Message = stringPtr(fmt.Sprintf(
-			"PoE 剩余保障功率仅 %.1f%s，已低于故障阈值 %g%s，新接入的 AP 或 IP 话机将无法上电",
-			remaining, unit, critical, unit))
+			"PoE 剩余保障功率仅 %.1f%s，已低于故障阈值 %g%s，新接入的 AP 或 IP 话机将无法上电%s",
+			remaining, unit, critical, unit, topPortSuffix))
 	case remaining <= warning:
 		result.Status = "warning"
 		result.Message = stringPtr(fmt.Sprintf(
-			"PoE 剩余保障功率 %.1f%s，低于警告阈值 %g%s，扩容前请评估供电预算",
-			remaining, unit, warning, unit))
+			"PoE 剩余保障功率 %.1f%s，低于警告阈值 %g%s，扩容前请评估供电预算%s",
+			remaining, unit, warning, unit, topPortSuffix))
 	default:
 		result.Status = "pass"
-		result.Message = stringPtr(fmt.Sprintf("PoE 剩余保障功率 %.1f%s，供电余量充足", remaining, unit))
+		result.Message = stringPtr(fmt.Sprintf("PoE 剩余保障功率 %.1f%s，供电余量充足%s", remaining, unit, topPortSuffix))
 	}
 }
 
@@ -1726,22 +1766,27 @@ func (h InspectionHandler) checkPoEMetric(result *inspection.Result, metrics *de
 // 还是「查光纤」的判断依据，只给一个收光值无从区分。
 type opticalModuleEntry struct {
 	Index           string   `json:"index"`
+	Name            string   `json:"name,omitempty"`
+	VendorSN        string   `json:"vendor_sn,omitempty"`
 	Verdict         string   `json:"verdict"`
 	RxPower         float64  `json:"rx_power"`
 	RxPowerUnit     string   `json:"rx_power_unit"`
 	TxPower         *float64 `json:"tx_power,omitempty"`
 	TxPowerUnit     string   `json:"tx_power_unit,omitempty"`
+	Temperature     *float64 `json:"temperature,omitempty"`
+	TemperatureUnit string   `json:"temperature_unit,omitempty"`
 	Voltage         *float64 `json:"voltage,omitempty"`
 	VoltageUnit     string   `json:"voltage_unit,omitempty"`
 	BiasCurrent     *float64 `json:"bias_current,omitempty"`
 	BiasCurrentUnit string   `json:"bias_current_unit,omitempty"`
+	VerdictReason   string   `json:"verdict_reason,omitempty"`
 }
 
 // opticalPowerSummary 光模块收光功率汇总。
 type opticalPowerSummary struct {
 	Total        int
 	Evaluated    int
-	OverWarning  int // 低于警告阈值（含低于故障阈值的）
+	OverWarning  int // 低于/高于阈值或高温告警（含故障）
 	OverCritical int
 	Worst        float64
 	WorstName    string
@@ -1772,19 +1817,16 @@ func normalizeOpticalPowerDBm(power float64, unit string) (float64, string, bool
 	return power, trimmed, true
 }
 
-// summarizeOpticalModules 逐模块判定收光功率。
-//
-// 与其他阈值检查方向相反：光功率越低越危险，判定用「低于阈值告警」。
-func summarizeOpticalModules(modules []devices.OpticalTransceiverMetrics, warning, critical float64) opticalPowerSummary {
+// summarizeOpticalModules 逐模块判定收光功率、过载与温度。
+func summarizeOpticalModules(modules []devices.OpticalTransceiverMetrics, th opticalEvalThresholds) opticalPowerSummary {
 	summary := opticalPowerSummary{Total: len(modules)}
 	entries := make([]opticalModuleEntry, 0, len(modules))
 
 	for _, module := range modules {
+		displayName := opticalDisplayName(module)
 		if module.RxPower == nil {
-			// 未上报收光的模块必须留痕：直接丢弃会让「采到 8 个只评了 3 个」
-			// 在报告里变成「3 个模块均正常」的假全景。
 			summary.Skipped = append(summary.Skipped, interfaceUtilizationSkipped{
-				Name: module.Index, Reason: "设备未上报收光功率（该模块不支持 DDM 或未插入光纤）",
+				Name: displayName, Reason: "设备未上报收光功率（该模块不支持 DDM 或未插入光纤）",
 			})
 			continue
 		}
@@ -1792,7 +1834,7 @@ func summarizeOpticalModules(modules []devices.OpticalTransceiverMetrics, warnin
 		rx, unit, ok := normalizeOpticalPowerDBm(*module.RxPower, module.RxPowerUnit)
 		if !ok {
 			summary.Skipped = append(summary.Skipped, interfaceUtilizationSkipped{
-				Name: module.Index, Reason: "设备未上报有效收光功率（无光信号或不支持 DDM）",
+				Name: displayName, Reason: "设备未上报有效收光功率（无光信号或不支持 DDM）",
 			})
 			continue
 		}
@@ -1800,17 +1842,14 @@ func summarizeOpticalModules(modules []devices.OpticalTransceiverMetrics, warnin
 		summary.Evaluated++
 		if summary.Evaluated == 1 || rx < summary.Worst {
 			summary.Worst = rx
-			summary.WorstName = module.Index
+			summary.WorstName = displayName
 		}
 
-		verdict := rowVerdictPass
-		switch {
-		case rx <= critical:
-			verdict = rowVerdictFail
+		verdict, reason := evaluateOpticalModule(module, rx, th)
+		if verdict == rowVerdictFail {
 			summary.OverCritical++
 			summary.OverWarning++
-		case rx <= warning:
-			verdict = rowVerdictWarning
+		} else if verdict == rowVerdictWarning {
 			summary.OverWarning++
 		}
 
@@ -1824,15 +1863,21 @@ func summarizeOpticalModules(modules []devices.OpticalTransceiverMetrics, warnin
 		}
 
 		entries = append(entries, opticalModuleEntry{
-			Index: module.Index, Verdict: verdict,
-			RxPower: rx, RxPowerUnit: unit,
-			TxPower: txPtr, TxPowerUnit: txUnit,
+			Index: module.Index, Name: strings.TrimSpace(module.Name), VendorSN: strings.TrimSpace(module.VendorSN),
+			Verdict: verdict, VerdictReason: reason,
+			RxPower: rx, RxPowerUnit: unit, TxPower: txPtr, TxPowerUnit: txUnit,
+			Temperature: module.Temperature, TemperatureUnit: module.TemperatureUnit,
 			Voltage: module.Voltage, VoltageUnit: module.VoltageUnit,
 			BiasCurrent: module.BiasCurrent, BiasCurrentUnit: module.BiasCurrentUnit,
 		})
 	}
 
-	sort.SliceStable(entries, func(i, j int) bool { return entries[i].RxPower < entries[j].RxPower })
+	sort.SliceStable(entries, func(i, j int) bool {
+		if rowVerdictRank(entries[i].Verdict) != rowVerdictRank(entries[j].Verdict) {
+			return rowVerdictRank(entries[i].Verdict) < rowVerdictRank(entries[j].Verdict)
+		}
+		return entries[i].RxPower < entries[j].RxPower
+	})
 	summary.Entries = entries
 
 	offenders := make([]string, 0, summary.OverWarning)
@@ -1840,7 +1885,15 @@ func summarizeOpticalModules(modules []devices.OpticalTransceiverMetrics, warnin
 		if entry.Verdict == rowVerdictPass {
 			continue
 		}
-		offenders = append(offenders, fmt.Sprintf("%s(%.1f%s)", entry.Index, entry.RxPower, entry.RxPowerUnit))
+		label := entry.Index
+		if entry.Name != "" {
+			label = entry.Name
+		}
+		if entry.VerdictReason != "" {
+			offenders = append(offenders, fmt.Sprintf("%s(%.1f%s, %s)", label, entry.RxPower, entry.RxPowerUnit, entry.VerdictReason))
+		} else {
+			offenders = append(offenders, fmt.Sprintf("%s(%.1f%s)", label, entry.RxPower, entry.RxPowerUnit))
+		}
 	}
 	summary.Offenders = offenders
 	return summary
@@ -1871,19 +1924,13 @@ func buildOpticalPowerDetails(summary opticalPowerSummary, warning, critical flo
 	return encodeDetailsPayload(payload)
 }
 
-// checkOpticalPowerMetric 检查光模块收发光功率。
-//
-// 与其他阈值检查方向相反：光功率是**越低越危险**，判定用「低于阈值告警」。
-// 光衰比错包更早暴露链路劣化，是提前更换光模块的依据。
-func (h InspectionHandler) checkOpticalPowerMetric(result *inspection.Result, metrics *devices.SNMPMetrics, warning, critical float64) {
+// checkOpticalPowerMetric 检查光模块收发光功率及过载/高温诊断。
+func (h InspectionHandler) checkOpticalPowerMetric(result *inspection.Result, metrics *devices.SNMPMetrics, config map[string]interface{}, bounds thresholdBounds) {
 	// 默认区间取通用光模块的可接受下限；不同型号差异较大，模板可覆盖
-	if warning == 0 {
-		warning = -25
-	}
-	if critical == 0 {
-		critical = -30
-	}
-	result.ExpectedValue = stringPtr(fmt.Sprintf("收光功率 > %gdBm（警告 <=%gdBm，故障 <=%gdBm）", warning, warning, critical))
+	warning, critical := bounds.resolve(-25, -30)
+	th := resolveOpticalThresholds(config, warning, critical)
+	result.ExpectedValue = stringPtr(fmt.Sprintf("收光功率 (%gdBm ~ %gdBm]，温度 < %g°C（警告 <=%gdBm/≥%gdBm/≥%g°C，故障 <=%gdBm/≥%gdBm/≥%g°C）",
+		warning, th.highWarn, th.tempWarn, warning, th.highWarn, th.tempWarn, critical, th.highCrit, th.tempCrit))
 	result.Details = buildThresholdDetails("optical_power", warning, critical, "dBm")
 
 	if metrics == nil || len(metrics.OpticalTransceivers) == 0 {
@@ -1892,7 +1939,7 @@ func (h InspectionHandler) checkOpticalPowerMetric(result *inspection.Result, me
 		return
 	}
 
-	summary := summarizeOpticalModules(metrics.OpticalTransceivers, warning, critical)
+	summary := summarizeOpticalModules(metrics.OpticalTransceivers, th)
 	result.Details = buildOpticalPowerDetails(summary, warning, critical)
 
 	if summary.Evaluated == 0 {
@@ -1901,7 +1948,7 @@ func (h InspectionHandler) checkOpticalPowerMetric(result *inspection.Result, me
 		return
 	}
 
-	actual := fmt.Sprintf("已评估 %d 个光模块；最低收光 %.1fdBm（%s）；超限 %d 个",
+	actual := fmt.Sprintf("已评估 %d 个光模块；最低收光 %.1fdBm（%s）；异常 %d 个",
 		summary.Evaluated, summary.Worst, summary.WorstName, summary.OverWarning)
 	result.ActualValue = &actual
 
@@ -1914,16 +1961,16 @@ func (h InspectionHandler) checkOpticalPowerMetric(result *inspection.Result, me
 	case summary.OverCritical > 0:
 		result.Status = "fail"
 		result.Message = stringPtr(fmt.Sprintf(
-			"%d 个光模块收光功率低于故障阈值 %gdBm，链路随时可能中断：%s",
-			summary.OverCritical, critical, strings.Join(shown, "、")))
+			"%d 个光模块光功率或温度达到故障阈值（<%gdBm / ≥%gdBm / ≥%g°C），请尽快排查：%s",
+			summary.OverCritical, critical, th.highCrit, th.tempCrit, strings.Join(shown, "、")))
 	case summary.OverWarning > 0:
 		result.Status = "warning"
 		result.Message = stringPtr(fmt.Sprintf(
-			"%d 个光模块收光功率低于警告阈值 %gdBm，建议排查光纤衰耗或准备更换模块：%s",
-			summary.OverWarning, warning, strings.Join(shown, "、")))
+			"%d 个光模块光功率或温度超过警告阈值，建议核查光纤衰耗、光衰器或模块散热：%s",
+			summary.OverWarning, strings.Join(shown, "、")))
 	default:
 		result.Status = "pass"
-		result.Message = stringPtr(fmt.Sprintf("已评估 %d 个光模块，收光功率均在正常区间（最低 %.1fdBm）",
+		result.Message = stringPtr(fmt.Sprintf("已评估 %d 个光模块，收光功率与温度均在正常区间（最低收光 %.1fdBm）",
 			summary.Evaluated, summary.Worst))
 	}
 }
@@ -2197,13 +2244,8 @@ func (h InspectionHandler) checkLLDPNeighborsMetric(result *inspection.Result, m
 }
 
 // checkSTPStatusMetric 检查生成树（STP）运行状态与拓扑稳定性。
-func (h InspectionHandler) checkSTPStatusMetric(result *inspection.Result, metrics *devices.SNMPMetrics, warningThreshold, criticalThreshold float64) {
-	if warningThreshold == 0 {
-		warningThreshold = 3600
-	}
-	if criticalThreshold == 0 {
-		criticalThreshold = 300
-	}
+func (h InspectionHandler) checkSTPStatusMetric(result *inspection.Result, metrics *devices.SNMPMetrics, bounds thresholdBounds) {
+	warningThreshold, criticalThreshold := bounds.resolve(3600, 300)
 	result.ExpectedValue = stringPtr(fmt.Sprintf("距上次拓扑变更 > %.0f 秒（警告 <=%.0f秒，故障 <=%.0f秒）",
 		warningThreshold, warningThreshold, criticalThreshold))
 	result.Details = buildThresholdDetails("stp_status", warningThreshold, criticalThreshold, "s")
@@ -2214,6 +2256,9 @@ func (h InspectionHandler) checkSTPStatusMetric(result *inspection.Result, metri
 		return
 	}
 
+	result.Details = buildSTPStatusDetails(metrics.STP, warningThreshold, criticalThreshold)
+	metaSummary := appendSTPMetadataSummary(metrics.STP)
+
 	if metrics.STP.ProtocolSpec != nil && *metrics.STP.ProtocolSpec == 1 && (metrics.STP.TopChanges == nil || *metrics.STP.TopChanges == 0) {
 		result.Status = "skip"
 		actual := "协议未启用"
@@ -2223,19 +2268,19 @@ func (h InspectionHandler) checkSTPStatusMetric(result *inspection.Result, metri
 	}
 
 	if metrics.STP.TopChanges != nil && *metrics.STP.TopChanges == 0 {
-		actual := "累计变更 0 次"
+		actual := "累计变更 0 次" + metaSummary
 		result.ActualValue = &actual
 		result.Status = "pass"
-		result.Message = stringPtr("生成树运行稳定，自上电以来未发生过拓扑变更（累计变更 0 次）")
+		result.Message = stringPtr("生成树运行稳定，自上电以来未发生过拓扑变更（累计变更 0 次）" + metaSummary)
 		return
 	}
 
 	if metrics.STP.TimeSinceTopologyChange == nil {
 		if metrics.STP.TopChanges != nil {
-			actual := fmt.Sprintf("累计变更 %d 次", *metrics.STP.TopChanges)
+			actual := fmt.Sprintf("累计变更 %d 次%s", *metrics.STP.TopChanges, metaSummary)
 			result.ActualValue = &actual
 			result.Status = "pass"
-			result.Message = stringPtr(fmt.Sprintf("生成树运行中，累计变更 %d 次（未上报距上次变更时间）", *metrics.STP.TopChanges))
+			result.Message = stringPtr(fmt.Sprintf("生成树运行中，累计变更 %d 次（未上报距上次变更时间）%s", *metrics.STP.TopChanges, metaSummary))
 		} else {
 			result.Status = "skip"
 			result.Message = stringPtr("未上报生成树拓扑变更时间")
@@ -2244,26 +2289,27 @@ func (h InspectionHandler) checkSTPStatusMetric(result *inspection.Result, metri
 	}
 
 	sec := *metrics.STP.TimeSinceTopologyChange
+	durStr := formatSTPDuration(sec)
 	topChangesStr := ""
 	if metrics.STP.TopChanges != nil {
 		topChangesStr = fmt.Sprintf("；累计变更 %d 次", *metrics.STP.TopChanges)
 	}
-	actual := fmt.Sprintf("距上次变更 %d 秒%s", sec, topChangesStr)
+	actual := fmt.Sprintf("距上次变更 %s（%d 秒）%s%s", durStr, sec, topChangesStr, metaSummary)
 	result.ActualValue = &actual
 
 	switch {
 	case float64(sec) <= criticalThreshold:
 		result.Status = "fail"
-		result.Message = stringPtr(fmt.Sprintf("生成树近期发生拓扑震荡：距上次变更仅 %d 秒（故障阈值 <=%.0f 秒）%s，可能存在二层链路频繁抖动或环路",
-			sec, criticalThreshold, topChangesStr))
+		result.Message = stringPtr(fmt.Sprintf("生成树近期发生拓扑震荡：距上次变更仅 %s（%d 秒，故障阈值 <=%.0f 秒）%s%s，可能存在二层链路频繁抖动或环路",
+			durStr, sec, criticalThreshold, topChangesStr, metaSummary))
 	case float64(sec) <= warningThreshold:
 		result.Status = "warning"
-		result.Message = stringPtr(fmt.Sprintf("生成树发生过拓扑变更：距上次变更 %d 秒（警告阈值 <=%.0f 秒）%s，建议排查二层网络稳定性",
-			sec, warningThreshold, topChangesStr))
+		result.Message = stringPtr(fmt.Sprintf("生成树发生过拓扑变更：距上次变更 %s（%d 秒，警告阈值 <=%.0f 秒）%s%s，建议排查二层网络稳定性",
+			durStr, sec, warningThreshold, topChangesStr, metaSummary))
 	default:
 		result.Status = "pass"
-		result.Message = stringPtr(fmt.Sprintf("生成树拓扑稳定：距上次变更 %d 秒（> %.0f 秒）%s",
-			sec, warningThreshold, topChangesStr))
+		result.Message = stringPtr(fmt.Sprintf("生成树拓扑稳定：距上次变更 %s（%d 秒，> %.0f 秒）%s%s",
+			durStr, sec, warningThreshold, topChangesStr, metaSummary))
 	}
 }
 
@@ -2274,6 +2320,7 @@ func (h InspectionHandler) checkSTPStatusMetric(result *inspection.Result, metri
 // interfaceRatioEntry 单个接口的计数器比率明细。
 type interfaceRatioEntry struct {
 	Name      string  `json:"name"`
+	Alias     string  `json:"alias,omitempty"`
 	Direction string  `json:"direction"`
 	Percent   float64 `json:"percent"`
 	Count     uint64  `json:"count"`
@@ -2320,7 +2367,8 @@ func summarizeInterfaceCounterRatio(
 			continue
 		}
 
-		best := interfaceRatioEntry{Name: name, Percent: -1}
+		alias := trimmedPortDescription(iface)
+		best := interfaceRatioEntry{Name: name, Alias: alias, Percent: -1}
 		evaluate := func(direction string, count, pkts *uint64) {
 			if count == nil || pkts == nil {
 				return
@@ -2332,7 +2380,7 @@ func summarizeInterfaceCounterRatio(
 			percent := float64(*count) / float64(total) * 100
 			if percent > best.Percent {
 				best = interfaceRatioEntry{
-					Name: name, Direction: direction, Percent: percent,
+					Name: name, Alias: alias, Direction: direction, Percent: percent,
 					Count: *count, Packets: *pkts,
 				}
 			}
@@ -2462,7 +2510,7 @@ func (h InspectionHandler) checkInterfaceCounterRatio(
 func (h InspectionHandler) checkInterfaceErrorsMetric(result *inspection.Result, metrics *devices.SNMPMetrics, warning, critical float64) {
 	h.checkInterfaceCounterRatio(result, metrics, warning, critical, "interface_errors", "错包率", 0.01, 0.1,
 		func(iface devices.InterfaceMetrics) (*uint64, *uint64, *uint64, *uint64) {
-			return iface.InErrors, iface.OutErrors, iface.InUcastPkts, iface.OutUcastPkts
+			return iface.InErrors, iface.OutErrors, sumPacketCounters(iface.InUcastPkts, iface.InNUcastPkts), sumPacketCounters(iface.OutUcastPkts, iface.OutNUcastPkts)
 		})
 }
 
@@ -2472,7 +2520,7 @@ func (h InspectionHandler) checkInterfaceErrorsMetric(result *inspection.Result,
 func (h InspectionHandler) checkInterfaceDiscardsMetric(result *inspection.Result, metrics *devices.SNMPMetrics, warning, critical float64) {
 	h.checkInterfaceCounterRatio(result, metrics, warning, critical, "interface_discards", "丢弃率", 0.1, 1,
 		func(iface devices.InterfaceMetrics) (*uint64, *uint64, *uint64, *uint64) {
-			return iface.InDiscards, iface.OutDiscards, iface.InUcastPkts, iface.OutUcastPkts
+			return iface.InDiscards, iface.OutDiscards, sumPacketCounters(iface.InUcastPkts, iface.InNUcastPkts), sumPacketCounters(iface.OutUcastPkts, iface.OutNUcastPkts)
 		})
 }
 
@@ -2501,7 +2549,8 @@ func summarizeInterfaceBroadcast(
 			continue
 		}
 
-		best := interfaceRatioEntry{Name: name, Percent: -1}
+		alias := trimmedPortDescription(iface)
+		best := interfaceRatioEntry{Name: name, Alias: alias, Percent: -1}
 		hasEnoughPackets := false
 
 		evaluate := func(direction string, count, pkts *uint64) {
@@ -2516,7 +2565,7 @@ func summarizeInterfaceBroadcast(
 			percent := float64(*count) / float64(total) * 100
 			if percent > best.Percent {
 				best = interfaceRatioEntry{
-					Name: name, Direction: direction, Percent: percent,
+					Name: name, Alias: alias, Direction: direction, Percent: percent,
 					Count: *count, Packets: *pkts,
 				}
 			}
@@ -2625,11 +2674,9 @@ func (h InspectionHandler) checkInterfaceAdminStatusMetric(result *inspection.Re
 
 	evaluated, adminDown, idle := 0, 0, 0
 	broken := make([]string, 0)
+	entries := make([]interfaceStatusDetailEntry, 0)
 	for _, iface := range metrics.Interfaces {
-		name := strings.TrimSpace(iface.Description)
-		if name == "" {
-			name = strings.TrimSpace(iface.Name)
-		}
+		name := interfaceDisplayName(iface)
 		// 逻辑口（Vlanif、LoopBack、NULL、Eth-Trunk…）的运行状态取决于成员口，
 		// 成员口自身已被评估，重复计入只会制造噪声。
 		if iface.AdminUp == nil || devices.IsLogicalInterface(name) {
@@ -2648,6 +2695,11 @@ func (h InspectionHandler) checkInterfaceAdminStatusMetric(result *inspection.Re
 		// 每台接入交换机都过不了巡检。计数器断链后不清零，是可靠的在用证据。
 		if interfaceHasTrafficHistory(iface) {
 			broken = append(broken, name)
+			entries = append(entries, interfaceStatusDetailEntry{
+				Name: name, Alias: trimmedPortDescription(iface), SpeedMbps: iface.Speed,
+				StatusLabel: "admin up / oper down", Verdict: rowVerdictFail,
+				Reason: "曾承载流量，现运行状态为 DOWN（链路中断或对端异常）",
+			})
 		} else {
 			idle++
 		}
@@ -2659,6 +2711,7 @@ func (h InspectionHandler) checkInterfaceAdminStatusMetric(result *inspection.Re
 		return
 	}
 
+	result.Details = buildInterfaceStatusDetails("admin_status", evaluated, len(broken), &adminDown, &idle, entries)
 	actual := fmt.Sprintf("已评估 %d 个接口；中断 %d 个，空闲 %d 个，人为关闭 %d 个", evaluated, len(broken), idle, adminDown)
 	result.ActualValue = &actual
 
@@ -2705,8 +2758,10 @@ func (h InspectionHandler) checkInterfaceDuplexMetric(result *inspection.Result,
 
 	evaluated := 0
 	half := make([]string, 0)
+	entries := make([]interfaceStatusDetailEntry, 0)
 	for _, iface := range metrics.Interfaces {
-		if devices.IsIgnoredInspectionInterface(interfaceDisplayName(iface)) {
+		name := interfaceDisplayName(iface)
+		if devices.IsIgnoredInspectionInterface(name) {
 			continue
 		}
 		if iface.DuplexStatus == nil {
@@ -2722,11 +2777,12 @@ func (h InspectionHandler) checkInterfaceDuplexMetric(result *inspection.Result,
 		}
 		evaluated++
 		if *iface.DuplexStatus == 2 {
-			name := strings.TrimSpace(iface.Description)
-			if name == "" {
-				name = strings.TrimSpace(iface.Name)
-			}
 			half = append(half, name)
+			entries = append(entries, interfaceStatusDetailEntry{
+				Name: name, Alias: trimmedPortDescription(iface), SpeedMbps: iface.Speed,
+				StatusLabel: "up", DuplexLabel: "半双工 (halfDuplex)", Verdict: rowVerdictWarning,
+				Reason: "高速以太网口工作在半双工模式，易引发错包与性能下降",
+			})
 		}
 	}
 
@@ -2736,6 +2792,7 @@ func (h InspectionHandler) checkInterfaceDuplexMetric(result *inspection.Result,
 		return
 	}
 
+	result.Details = buildInterfaceStatusDetails("duplex", evaluated, len(half), nil, nil, entries)
 	actual := fmt.Sprintf("已评估 %d 个接口；半双工 %d 个", evaluated, len(half))
 	result.ActualValue = &actual
 

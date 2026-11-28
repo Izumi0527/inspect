@@ -311,6 +311,58 @@
         "oid": "1.3.6.1.2.1.17.2.4.0",
         "method": "get",
         "value_type": "counter32"
+      },
+      "stp_priority": {
+        "oid": "1.3.6.1.2.1.17.2.2.0",
+        "method": "get",
+        "value_type": "integer"
+      },
+      "stp_designated_root": {
+        "oid": "1.3.6.1.2.1.17.2.5.0",
+        "method": "get",
+        "value_type": "octets"
+      },
+      "stp_root_cost": {
+        "oid": "1.3.6.1.2.1.17.2.6.0",
+        "method": "get",
+        "value_type": "integer"
+      },
+      "stp_root_port": {
+        "oid": "1.3.6.1.2.1.17.2.7.0",
+        "method": "get",
+        "value_type": "integer"
+      }
+    },
+    "q_bridge": {
+      "dot1d_base_num_ports": {
+        "oid": "1.3.6.1.2.1.17.1.2.0",
+        "method": "get",
+        "value_type": "integer"
+      },
+      "dot1q_max_vlan_id": {
+        "oid": "1.3.6.1.2.1.17.7.1.1.2.0",
+        "method": "get",
+        "value_type": "integer"
+      },
+      "dot1q_max_supported_vlans": {
+        "oid": "1.3.6.1.2.1.17.7.1.1.3.0",
+        "method": "get",
+        "value_type": "gauge32"
+      },
+      "dot1q_num_vlans": {
+        "oid": "1.3.6.1.2.1.17.7.1.1.4.0",
+        "method": "get",
+        "value_type": "gauge32"
+      },
+      "dot1q_gvrp_status": {
+        "oid": "1.3.6.1.2.1.17.7.1.1.5.0",
+        "method": "get",
+        "value_type": "integer"
+      },
+      "dot1q_fdb_dynamic_count": {
+        "oid": "1.3.6.1.2.1.17.7.1.2.1.1.2",
+        "method": "bulkwalk",
+        "value_type": "counter32"
       }
     }
   },
@@ -671,6 +723,23 @@
           "description": "PoE 设备剩余保障功率"
         },
         {
+          "id": "hw_poe_slot_available_power",
+          "name": "hwPoeSlotAvailablePower",
+          "oid": "1.3.6.1.4.1.2011.5.25.195.2.1.3",
+          "method": "bulkwalk",
+          "value_type": "integer",
+          "unit": "mW",
+          "description": "PoE 槽位剩余可用功率"
+        },
+        {
+          "id": "hw_poe_port_name",
+          "name": "hwPoePortName",
+          "oid": "1.3.6.1.4.1.2011.5.25.195.3.1.2",
+          "method": "bulkwalk",
+          "value_type": "string",
+          "description": "PoE 端口名称"
+        },
+        {
           "id": "hw_poe_port_consuming_power",
           "name": "hwPoePortConsumingPower",
           "oid": "1.3.6.1.4.1.2011.5.25.195.3.1.10",
@@ -754,12 +823,132 @@
           "description": "堆叠运行使能状态"
         },
         {
+          "id": "hw_stack_topo_type",
+          "name": "hwStackTopoType",
+          "oid": "1.3.6.1.4.1.2011.5.25.183.1.2.0",
+          "method": "get",
+          "value_type": "integer",
+          "description": "堆叠拓扑类型（1=chain, 2=ring）"
+        },
+        {
+          "id": "hw_stack_is_stack_device",
+          "name": "hwStackIsStackDevice",
+          "oid": "1.3.6.1.4.1.2011.5.25.183.1.5.0",
+          "method": "get",
+          "value_type": "integer",
+          "description": "是否为堆叠设备"
+        },
+        {
+          "id": "hw_stack_member_current_id",
+          "name": "hwStackMemberCurrentId",
+          "oid": "1.3.6.1.4.1.2011.5.25.183.1.20.1.1",
+          "method": "bulkwalk",
+          "value_type": "integer",
+          "description": "堆叠成员当前槽位号"
+        },
+        {
+          "id": "hw_stack_member_priority",
+          "name": "hwStackMemberPriority",
+          "oid": "1.3.6.1.4.1.2011.5.25.183.1.20.1.2",
+          "method": "bulkwalk",
+          "value_type": "integer",
+          "description": "堆叠成员优先级"
+        },
+        {
+          "id": "hw_stack_member_role",
+          "name": "hwStackMemberRole",
+          "oid": "1.3.6.1.4.1.2011.5.25.183.1.20.1.3",
+          "method": "bulkwalk",
+          "value_type": "integer",
+          "description": "堆叠成员角色（1=master, 2=standby, 3=slave）"
+        },
+        {
+          "id": "hw_stack_member_mac",
+          "name": "hwStackMemberMac",
+          "oid": "1.3.6.1.4.1.2011.5.25.183.1.20.1.4",
+          "method": "bulkwalk",
+          "value_type": "octets",
+          "description": "堆叠成员 MAC 地址"
+        },
+        {
+          "id": "hw_stack_port_name",
+          "name": "hwStackPortName",
+          "oid": "1.3.6.1.4.1.2011.5.25.183.1.21.1.3",
+          "method": "bulkwalk",
+          "value_type": "string",
+          "description": "物理堆叠端口名称"
+        },
+        {
           "id": "hw_stack_port_status",
           "name": "hwStackPortStatus",
           "oid": "1.3.6.1.4.1.2011.5.25.183.1.21.1.5",
           "method": "bulkwalk",
           "value_type": "integer",
           "description": "物理堆叠端口运行状态"
+        }
+      ],
+      "config_man": [
+        {
+          "id": "hw_cfg_run_modified_last",
+          "name": "hwCfgRunModifiedLast",
+          "oid": "1.3.6.1.4.1.2011.6.10.1.1.1.0",
+          "method": "get",
+          "value_type": "timeticks",
+          "description": "运行配置最近修改时间"
+        },
+        {
+          "id": "hw_cfg_run_saved_last",
+          "name": "hwCfgRunSavedLast",
+          "oid": "1.3.6.1.4.1.2011.6.10.1.1.2.0",
+          "method": "get",
+          "value_type": "timeticks",
+          "description": "运行配置最近保存时间"
+        },
+        {
+          "id": "hw_cfg_start_modified_last",
+          "name": "hwCfgStartModifiedLast",
+          "oid": "1.3.6.1.4.1.2011.6.10.1.1.3.0",
+          "method": "get",
+          "value_type": "timeticks",
+          "description": "启动配置最近修改时间"
+        }
+      ],
+      "flash": [
+        {
+          "id": "hw_flh_part_space",
+          "name": "hwFlhPartSpace",
+          "oid": "1.3.6.1.4.1.2011.6.9.1.1.4.1.1.4",
+          "method": "bulkwalk",
+          "value_type": "integer",
+          "unit": "B",
+          "description": "Flash 分区总空间"
+        },
+        {
+          "id": "hw_flh_part_space_free",
+          "name": "hwFlhPartSpaceFree",
+          "oid": "1.3.6.1.4.1.2011.6.9.1.1.4.1.1.5",
+          "method": "bulkwalk",
+          "value_type": "integer",
+          "unit": "B",
+          "description": "Flash 分区剩余空间"
+        },
+        {
+          "id": "hw_flh_part_name",
+          "name": "hwFlhPartName",
+          "oid": "1.3.6.1.4.1.2011.6.9.1.1.4.1.1.6",
+          "method": "bulkwalk",
+          "value_type": "string",
+          "description": "Flash 分区名称"
+        }
+      ],
+      "stp": [
+        {
+          "id": "hw_mstp_bpdu_guard",
+          "name": "hwMstpBpduGuard",
+          "oid": "1.3.6.1.4.1.2011.5.25.42.4.1.7.0",
+          "method": "get",
+          "value_type": "integer",
+          "description": "全局 BPDU 保护使能状态"
         }
       ]
     },
@@ -873,6 +1062,70 @@
           "value_type": "gauge32",
           "unit": "0.1uW",
           "description": "光模块当前收光功率"
+        }
+      ],
+      "config_man": [
+        {
+          "id": "hh3c_cfg_run_modified_last",
+          "name": "hh3cCfgRunModifiedLast",
+          "oid": "1.3.6.1.4.1.25506.2.4.1.1.1.0",
+          "method": "get",
+          "value_type": "timeticks",
+          "description": "运行配置最近修改时间"
+        },
+        {
+          "id": "hh3c_cfg_run_saved_last",
+          "name": "hh3cCfgRunSavedLast",
+          "oid": "1.3.6.1.4.1.25506.2.4.1.1.2.0",
+          "method": "get",
+          "value_type": "timeticks",
+          "description": "运行配置最近保存时间"
+        }
+      ],
+      "stack": [
+        {
+          "id": "hh3c_irf_member_role",
+          "name": "hh3cIrfMemberRole",
+          "oid": "1.3.6.1.4.1.25506.2.91.2.1.2",
+          "method": "bulkwalk",
+          "value_type": "integer",
+          "description": "IRF 堆叠成员角色"
+        },
+        {
+          "id": "hh3c_irf_port_status",
+          "name": "hh3cIrfPortStatus",
+          "oid": "1.3.6.1.4.1.25506.2.91.5.1.2",
+          "method": "bulkwalk",
+          "value_type": "integer",
+          "description": "IRF 物理端口状态"
+        }
+      ],
+      "flash": [
+        {
+          "id": "hh3c_flh_part_space",
+          "name": "hh3cFlhPartSpace",
+          "oid": "1.3.6.1.4.1.25506.2.5.1.1.4.1.1.4",
+          "method": "bulkwalk",
+          "value_type": "integer",
+          "unit": "B",
+          "description": "Flash 分区总空间"
+        },
+        {
+          "id": "hh3c_flh_part_space_free",
+          "name": "hh3cFlhPartSpaceFree",
+          "oid": "1.3.6.1.4.1.25506.2.5.1.1.4.1.1.5",
+          "method": "bulkwalk",
+          "value_type": "integer",
+          "unit": "B",
+          "description": "Flash 分区剩余空间"
+        },
+        {
+          "id": "hh3c_flh_part_name",
+          "name": "hh3cFlhPartName",
+          "oid": "1.3.6.1.4.1.25506.2.5.1.1.4.1.1.6",
+          "method": "bulkwalk",
+          "value_type": "string",
+          "description": "Flash 分区名称"
         }
       ]
     }

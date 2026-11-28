@@ -363,7 +363,7 @@ type inspectionDimension struct {
 }
 
 // inspectionDimensions 是全部可采集维度的清单，顺序即报告中的呈现顺序，
-// 与 inspection 包内置检查项的 metric 一一对应（23 项）。
+// 与 inspection 包内置检查项的 metric 一一对应（28 项）。
 //
 // **这是新增 metric 的第五处同步点**：漏加会让该维度既不算覆盖也不算未覆盖，
 // 报告的覆盖声明因此失真（外置测试 TestCoverage_BuiltinTemplateCoversItsDeviceTypeFully 守门）。
@@ -376,8 +376,11 @@ var inspectionDimensions = []inspectionDimension{
 	{Metric: "cpu", Label: "CPU"},
 	{Metric: "memory", Label: "内存"},
 	{Metric: "disk_usage", Label: "磁盘使用率"},
+	{Metric: "flash_usage", Label: "Flash 存储"},
+	{Metric: "board_status", Label: "单板状态"},
 	{Metric: "fan_status", Label: "风扇状态"},
 	{Metric: "power_status", Label: "电源状态"},
+	{Metric: "stack_status", Label: "堆叠状态"},
 	{Metric: "temperature", Label: "温度"},
 	{Metric: "uptime", Label: "运行时长"},
 	{Metric: "interface", Label: "接口状态"},
@@ -391,9 +394,117 @@ var inspectionDimensions = []inspectionDimension{
 	{Metric: "poe", Label: "PoE 供电"},
 	{Metric: "optical_power", Label: "光模块光功率"},
 	{Metric: "bgp_peers", Label: "BGP 邻居"},
+	{Metric: "vlan_status", Label: "VLAN 与转发表"},
 	{Metric: "firmware_version", Label: "固件版本"},
 	{Metric: "lldp_neighbors", Label: "LLDP 邻居"},
 	{Metric: "stp_status", Label: "生成树状态"},
+	{Metric: "config_save_status", Label: "配置保存状态"},
+}
+
+const (
+	checkDomainConnectivity = "连通与可达性"
+	checkDomainHealth       = "硬件与系统健康"
+	checkDomainPerformance  = "端口与链路性能"
+	checkDomainCompliance   = "配置与安全合规"
+)
+
+var inspectionCategoryOrder = []string{
+	checkDomainConnectivity,
+	checkDomainHealth,
+	checkDomainPerformance,
+	checkDomainCompliance,
+}
+
+var metricDomainMap = map[string]string{
+	"connectivity":           checkDomainConnectivity,
+	"reachable":              checkDomainConnectivity,
+	"lldp_neighbors":         checkDomainConnectivity,
+	"cpu":                    checkDomainHealth,
+	"memory":                 checkDomainHealth,
+	"disk_usage":             checkDomainHealth,
+	"flash_usage":            checkDomainHealth,
+	"board_status":           checkDomainHealth,
+	"fan_status":             checkDomainHealth,
+	"power_status":           checkDomainHealth,
+	"stack_status":           checkDomainHealth,
+	"temperature":            checkDomainHealth,
+	"uptime":                 checkDomainHealth,
+	"poe":                    checkDomainHealth,
+	"optical_power":          checkDomainHealth,
+	"stp_status":             checkDomainHealth,
+	"firmware_version":       checkDomainHealth,
+	"interface":              checkDomainPerformance,
+	"interface_utilization":  checkDomainPerformance,
+	"interface_errors":       checkDomainPerformance,
+	"interface_discards":     checkDomainPerformance,
+	"interface_admin_status": checkDomainPerformance,
+	"interface_duplex":       checkDomainPerformance,
+	"interface_broadcast":    checkDomainPerformance,
+	"bandwidth":              checkDomainPerformance,
+	"bgp_peers":              checkDomainPerformance,
+	"vlan_status":            checkDomainPerformance,
+	"config_save_status":     checkDomainCompliance,
+}
+
+// mapExplicitCheckCategory 将模板/结果中的 category 字段归一到四大运维域。
+func mapExplicitCheckCategory(category string) (string, bool) {
+	switch strings.ToLower(strings.TrimSpace(category)) {
+	case "connectivity", "连通", "连通性", "可达", checkDomainConnectivity:
+		return checkDomainConnectivity, true
+	case "health", "hardware", "硬件", "系统健康", checkDomainHealth:
+		return checkDomainHealth, true
+	case "performance", "interface", "port", "性能", "端口", "链路", checkDomainPerformance:
+		return checkDomainPerformance, true
+	case "security", "compliance", "config", "配置", "安全", "合规", checkDomainCompliance:
+		return checkDomainCompliance, true
+	default:
+		return "", false
+	}
+}
+
+// resolveCheckDomain 将检查项归入四大运维域：优先匹配显式 category，
+// 其次按 metric 精确映射，最后用协议类型与名称关键字兜底。
+func resolveCheckDomain(category, checkName, checkType, metric string) string {
+	if mapped, ok := mapExplicitCheckCategory(category); ok {
+		return mapped
+	}
+	if mapped, ok := metricDomainMap[strings.ToLower(strings.TrimSpace(metric))]; ok {
+		return mapped
+	}
+	return resolveCheckDomainByKeywords(checkName, checkType)
+}
+
+func resolveCheckDomainByKeywords(checkName, checkType string) string {
+	typ := strings.ToLower(strings.TrimSpace(checkType))
+	if typ == "icmp" || typ == "ping" {
+		return checkDomainConnectivity
+	}
+	key := strings.ToLower(strings.TrimSpace(checkName + " " + checkType))
+	switch {
+	case containsAnyKeyword(key, "bgp"):
+		return checkDomainPerformance
+	case containsAnyKeyword(key, "连通", "可达", "ping", "icmp", "lldp"):
+		return checkDomainConnectivity
+	case containsAnyKeyword(key, "配置", "保存", "备份", "config", "security", "合规", "安全", "凭据", "认证", "acl", "基线"):
+		return checkDomainCompliance
+	case containsAnyKeyword(key, "接口", "端口", "interface", "port", "带宽", "bandwidth", "利用率", "错包", "丢弃", "丢包", "双工", "非单播", "广播", "vlan", "转发表"):
+		return checkDomainPerformance
+	case containsAnyKeyword(key, "cpu", "内存", "memory", "磁盘", "disk", "flash", "存储", "温度", "temperature", "风扇", "fan", "电源", "power", "单板", "board", "堆叠", "stack", "irf", "poe", "光模块", "光功率", "optical", "stp", "生成树", "运行", "uptime", "固件", "firmware", "版本"):
+		return checkDomainHealth
+	case typ == "ssh" || typ == "http" || typ == "script":
+		return checkDomainCompliance
+	default:
+		return checkDomainHealth
+	}
+}
+
+func containsAnyKeyword(text string, keywords ...string) bool {
+	for _, kw := range keywords {
+		if strings.Contains(text, kw) {
+			return true
+		}
+	}
+	return false
 }
 
 // coverageUniverse 返回覆盖范围的全集（维度键集合）：模板声明的各可巡检设备类型

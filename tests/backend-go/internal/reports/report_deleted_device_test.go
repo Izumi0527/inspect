@@ -22,7 +22,8 @@ func TestMarkDeletedInspectionDevice_LabelsUnrecoverableIdentity(t *testing.T) {
 	}
 	for label, got := range map[string]string{
 		"IPAddress": device.IPAddress, "DeviceType": device.DeviceType, "Vendor": device.Vendor,
-		"Model": device.Model, "SoftwareVersion": device.SoftwareVersion, "Uptime": device.Uptime,
+		"Model": device.Model, "SerialNumber": device.SerialNumber, "Location": device.Location,
+		"SoftwareVersion": device.SoftwareVersion, "Uptime": device.Uptime,
 	} {
 		if got != "设备已删除" {
 			t.Fatalf("%s = %q, want 设备已删除", label, got)

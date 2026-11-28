@@ -22,6 +22,9 @@ import {
   DiskUsageDetails,
   LLDPNeighborsDetails,
   PoEDetails,
+  StackStatusDetails,
+  InterfaceStatusDetails,
+  FlashUsageDetails,
   InspectionStrategy,
   InspectionAnalyticsRange
 } from '../types'
@@ -197,6 +200,7 @@ const mapInterfaceUtilizationDetails = (raw: unknown): InterfaceUtilizationDetai
         const entry = item as UnknownRecord
         return {
           name: toString(entry.name),
+          alias: toString(entry.alias) || undefined,
           direction: toString(entry.direction),
           percent: toNumber(entry.percent),
           speed_mbps: toNumber(entry.speed_mbps),
@@ -258,6 +262,7 @@ const mapInterfaceRatioDetails = (record: UnknownRecord): InterfaceRatioDetails 
     critical_threshold: toNumber(record.critical_threshold),
     interfaces: toRecordArray(record.interfaces).map(entry => ({
       name: toString(entry.name),
+      alias: toString(entry.alias) || undefined,
       direction: toString(entry.direction),
       percent: toNumber(entry.percent),
       count: toNumber(entry.count),
@@ -286,11 +291,15 @@ const mapOpticalPowerDetails = (record: UnknownRecord): OpticalPowerDetails | un
     critical_threshold: toNumber(record.critical_threshold),
     modules: toRecordArray(record.modules).map(entry => ({
       index: toString(entry.index),
+      name: toString(entry.name) || undefined,
+      vendor_sn: toString(entry.vendor_sn) || undefined,
       verdict: toVerdict(entry.verdict),
       rx_power: toNumber(entry.rx_power),
       rx_power_unit: toString(entry.rx_power_unit, 'dBm'),
       tx_power: toOptionalNumber(entry.tx_power),
       tx_power_unit: toString(entry.tx_power_unit) || undefined,
+      temperature: toOptionalNumber(entry.temperature),
+      temperature_unit: toString(entry.temperature_unit) || undefined,
       voltage: toOptionalNumber(entry.voltage),
       voltage_unit: toString(entry.voltage_unit) || undefined,
       bias_current: toOptionalNumber(entry.bias_current),
@@ -322,7 +331,7 @@ const mapBGPPeersDetails = (record: UnknownRecord): BGPPeersDetails | undefined 
   }
 }
 
-/** 解析风扇 / 电源部件状态明细。 */
+/** 解析风扇 / 电源 / 单板部件状态明细。 */
 const mapComponentStatusDetails = (record: UnknownRecord): ComponentStatusDetails | undefined => {
   if (record.kind !== 'component_status') return undefined
 
@@ -343,9 +352,11 @@ const mapComponentStatusDetails = (record: UnknownRecord): ComponentStatusDetail
     abnormal_states: toStateCodes(record.abnormal_states),
     components: toRecordArray(record.components).map(entry => ({
       index: toString(entry.index),
+      name: toString(entry.name) || undefined,
       kind: toString(entry.kind),
       verdict: toVerdict(entry.verdict),
       state: toOptionalNumber(entry.state),
+      status_label: toString(entry.status_label) || undefined,
     })),
   }
 }
@@ -414,10 +425,83 @@ const mapPoEDetails = (record: UnknownRecord): PoEDetails | undefined => {
       : undefined,
     ports: toRecordArray(record.ports).map(entry => ({
       index: toString(entry.index),
+      name: toString(entry.name) || undefined,
       consuming_power: toOptionalNumber(entry.consuming_power),
       peak_power: toOptionalNumber(entry.peak_power),
       unit: toString(entry.unit) || undefined,
     })),
+  }
+}
+
+const mapStackStatusDetails = (record: UnknownRecord): StackStatusDetails | undefined => {
+  if (record.kind !== 'stack_status') return undefined
+
+  return {
+    kind: 'stack_status',
+    enabled: Boolean(record.enabled),
+    standalone: Boolean(record.standalone),
+    topology: toString(record.topology),
+    member_count: toNumber(record.member_count),
+    port_up_count: toNumber(record.port_up_count),
+    port_down_count: toNumber(record.port_down_count),
+    members: toRecordArray(record.members).map(entry => ({
+      id: toString(entry.id),
+      role: toString(entry.role),
+      priority: toOptionalNumber(entry.priority),
+      mac: toString(entry.mac) || undefined,
+      verdict: toVerdict(entry.verdict),
+    })),
+    ports: toRecordArray(record.ports).map(entry => ({
+      name: toString(entry.name),
+      status: toString(entry.status),
+      verdict: toVerdict(entry.verdict),
+    })),
+  }
+}
+
+const mapInterfaceStatusDetails = (record: UnknownRecord): InterfaceStatusDetails | undefined => {
+  if (record.kind !== 'interface_status_detail') return undefined
+  if (record.sub_kind !== 'admin_status' && record.sub_kind !== 'duplex') return undefined
+
+  return {
+    kind: 'interface_status_detail',
+    sub_kind: record.sub_kind,
+    total_evaluated: toNumber(record.total_evaluated),
+    abnormal_count: toNumber(record.abnormal_count),
+    admin_down_count: toOptionalNumber(record.admin_down_count),
+    idle_count: toOptionalNumber(record.idle_count),
+    entries: toRecordArray(record.entries).map(entry => ({
+      name: toString(entry.name),
+      alias: toString(entry.alias) || undefined,
+      speed_mbps: toOptionalNumber(entry.speed_mbps),
+      status_label: toString(entry.status_label),
+      duplex_label: toString(entry.duplex_label) || undefined,
+      verdict: toVerdict(entry.verdict),
+      reason: toString(entry.reason),
+    })),
+  }
+}
+
+const mapFlashUsageDetails = (record: UnknownRecord): FlashUsageDetails | undefined => {
+  if (record.kind !== 'flash_usage') return undefined
+
+  return {
+    kind: 'flash_usage',
+    total: toNumber(record.total),
+    evaluated: toNumber(record.evaluated),
+    over_warning: toNumber(record.over_warning),
+    over_critical: toNumber(record.over_critical),
+    warning_threshold: toNumber(record.warning_threshold),
+    critical_threshold: toNumber(record.critical_threshold),
+    partitions: toRecordArray(record.partitions).map(entry => ({
+      name: toString(entry.name),
+      total_bytes: toNumber(entry.total_bytes),
+      used_bytes: toNumber(entry.used_bytes),
+      free_bytes: toNumber(entry.free_bytes),
+      percent: toNumber(entry.percent),
+      verdict: toVerdict(entry.verdict),
+    })),
+    skipped: mapSkippedEntries(record.skipped),
   }
 }
 
@@ -439,7 +523,10 @@ const mapCheckResultDetails = (raw: unknown): CheckResultDetails | undefined => 
     mapComponentStatusDetails(record) ??
     mapDiskUsageDetails(record) ??
     mapLLDPNeighborsDetails(record) ??
-    mapPoEDetails(record)
+    mapPoEDetails(record) ??
+    mapStackStatusDetails(record) ??
+    mapInterfaceStatusDetails(record) ??
+    mapFlashUsageDetails(record)
   )
 }
 

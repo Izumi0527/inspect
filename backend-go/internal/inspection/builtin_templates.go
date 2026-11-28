@@ -257,6 +257,53 @@ func ckInterfaceBroadcast() map[string]interface{} {
 	}
 }
 
+// ckBoardStatus 单板与实体状态。检查设备单板、槽位与物理实体运行状态。
+func ckBoardStatus() map[string]interface{} {
+	return map[string]interface{}{
+		"id": "board_status", "name": "单板与实体状态", "description": "检查设备单板、槽位与物理实体运行状态，识别板卡故障或离线",
+		"type": "snmp", "category": "health", "metric": "board_status", "weight": 9,
+		"config": map[string]interface{}{}, "enabled": true,
+	}
+}
+
+// ckStackStatus 堆叠与集群状态。检查堆叠成员角色、拓扑完整性与堆叠链路端口状态。
+func ckStackStatus() map[string]interface{} {
+	return map[string]interface{}{
+		"id": "stack_status", "name": "堆叠与集群状态", "description": "检查堆叠成员角色、拓扑完整性及堆叠链路端口状态，识别堆叠分裂或链路异常",
+		"type": "snmp", "category": "health", "metric": "stack_status", "weight": 9,
+		"config": map[string]interface{}{}, "enabled": true,
+	}
+}
+
+// ckConfigSaveStatus 配置保存一致性。比对运行配置与启动配置一致性，防范设备重启后配置丢失。
+func ckConfigSaveStatus() map[string]interface{} {
+	return map[string]interface{}{
+		"id": "config_save_status", "name": "配置保存一致性", "description": "比对运行配置与已保存启动配置的一致性，防范设备重启后配置丢失",
+		"type": "snmp", "category": "security", "metric": "config_save_status", "weight": 8,
+		"config": map[string]interface{}{}, "enabled": true,
+	}
+}
+
+// ckVLANStatus VLAN 与转发表状态。监控 VLAN 与二层转发表容量使用率。
+func ckVLANStatus() map[string]interface{} {
+	return map[string]interface{}{
+		"id": "vlan_status", "name": "VLAN 与转发表", "description": "检查 VLAN 与二层转发表容量使用率，预防表项耗尽导致泛洪",
+		"type": "snmp", "category": "performance", "metric": "vlan_status", "weight": 6,
+		"config":  map[string]interface{}{"unit": "%", "threshold": map[string]interface{}{"warning": 80, "critical": 95}},
+		"enabled": true,
+	}
+}
+
+// ckFlashUsage Flash 存储使用率。监控交换机 Flash 存储分区使用率。
+func ckFlashUsage() map[string]interface{} {
+	return map[string]interface{}{
+		"id": "flash_usage", "name": "Flash 存储使用率", "description": "监控设备 Flash 存储分区使用率，预防空间耗尽影响系统升级与配置保存",
+		"type": "snmp", "category": "health", "metric": "flash_usage", "weight": 7,
+		"config":  map[string]interface{}{"unit": "%", "threshold": map[string]interface{}{"warning": 80, "critical": 90}},
+		"enabled": true,
+	}
+}
+
 // ---------------------------------------------------------------------------
 // 主机专项检查项（HOST-RESOURCES-MIB，Linux net-snmp 与 Windows SNMP 服务均支持）
 // ---------------------------------------------------------------------------
@@ -299,21 +346,28 @@ func builtinTemplateSeeds() []builtinTemplateSeed {
 	return []builtinTemplateSeed{
 		{
 			Name:        "交换机巡检",
-			Description: "面向接入、汇聚与核心交换机：设备健康（CPU、内存、温度、风扇、电源），端口物理层（状态、错包、丢弃、双工、利用率），上联光模块与 PoE 供电余量。",
+			Description: "面向接入、汇聚与核心交换机：设备健康（CPU、内存、Flash 存储、温度、单板、风扇、电源、堆叠），端口物理层与状态一致性（错包、丢弃、双工、广播、利用率），上联光模块、PoE 供电余量、VLAN 与二层拓扑（LLDP、STP）及配置保存一致性。",
 			Category:    "network",
 			DeviceTypes: []string{"switch"},
 			CheckItems: []map[string]interface{}{
 				ckConnectivity(), ckSNMPReachable(),
 				describe(ckCPU(), "监控交换机 CPU 使用率；持续偏高常见于二层环路、广播风暴或协议报文冲击"),
 				describe(ckMemory(), "监控交换机内存使用率；MAC/ARP 表项膨胀会持续占用内存"),
-				ckTemperature(), ckFanStatus(), ckPowerStatus(), ckUptime(),
+				ckFlashUsage(),
+				ckTemperature(),
+				ckBoardStatus(),
+				ckFanStatus(), ckPowerStatus(),
+				ckStackStatus(),
+				ckUptime(),
 				describe(ckInterface(), "统计端口运行状态，全部端口均未运行时告警"),
 				describe(ckInterfaceAdminStatus(), "识别曾经承载流量、现已中断的端口；从未接线的空闲口不计异常"),
 				describe(ckInterfaceUtilization(), "逐端口计算入/出方向带宽利用率，识别上联与汇聚链路拥塞"),
 				ckInterfaceErrors(), ckInterfaceDiscards(),
 				describe(ckInterfaceDuplex(), "检测高速端口是否误协商为半双工（接入终端的常见故障）"),
+				ckInterfaceBroadcast(),
 				ckOpticalPower(), ckPoEStatus(),
-				ckLLDPNeighbors(), ckSTPStatus(), ckInterfaceBroadcast(),
+				ckVLANStatus(), ckSTPStatus(), ckLLDPNeighbors(),
+				ckConfigSaveStatus(),
 				ckFirmwareVersion(),
 			},
 		},

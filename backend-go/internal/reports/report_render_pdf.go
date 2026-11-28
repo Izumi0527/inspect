@@ -24,7 +24,7 @@ const (
 	pdfBottomMM    = 15.0
 	pdfTopOffsetMM = 1.6
 	// pdfMaxDeviceCheckRows 单设备巡检结果表格的最大行数，超出截断
-	pdfMaxDeviceCheckRows = 30
+	pdfMaxDeviceCheckRows = 100
 )
 
 func writeInspectionPDF(path string, data InspectionReportData) error {
@@ -77,6 +77,8 @@ func writeInspectionPDF(path string, data InspectionReportData) error {
 		{Label: "设备总数", Value: fmt.Sprintf("%d", len(data.Devices)), Color: pdfkit.ColorAmber500},
 		{Label: "执行时长", Value: formatDurationSeconds(data.ExecutionDuration), Color: pdfkit.ColorRose500},
 	}, 4)
+	pdf.Ln(3)
+	writeInspectionMetadataTable(pdf, data, generatedAt)
 	pdf.Ln(4)
 
 	toc.markSection("统计摘要", pdf.PageNo())
@@ -92,6 +94,7 @@ func writeInspectionPDF(path string, data InspectionReportData) error {
 	pdf.Ln(1)
 	pdfkit.ProgressBar(pdf, "通过率", data.SummaryStats.PassRate, pdfkit.PassRateColor(data.SummaryStats.PassRate))
 	embedInspectionDonut(pdf, data.SummaryStats)
+	writeInspectionCategoryStatsSection(pdf, data.CategoryStats)
 
 	// 异常清单紧跟统计摘要：数字之后立刻给出「哪台设备的哪一项出了问题」，
 	// 读者不必翻到后面逐设备明细里自行检索状态列。
@@ -110,31 +113,7 @@ func writeInspectionPDF(path string, data InspectionReportData) error {
 		pdfkit.EmptyStateWithHint(pdf, "当前筛选条件下暂无设备巡检明细", "请调整筛选条件后重试")
 		return pdf.OutputFileAndClose(path)
 	}
-	overviewRows := make([][]string, 0, len(data.Devices))
-	overviewFills := make([][3]int, 0, len(data.Devices))
-	overviewAccents := make([][3]int, 0, len(data.Devices))
-	for _, device := range data.Devices {
-		overviewRows = append(overviewRows, []string{
-			fallbackPDFValue(device.DeviceName),
-			fallbackPDFValue(device.IPAddress),
-			fallbackPDFValue(localizeDeviceType(device.DeviceType)),
-			fallbackPDFValue(localizeStatusWord(device.InspectionStatus)),
-			formatPercent(device.PassRate, 1),
-			fmt.Sprintf("%d", device.IssueCount),
-		})
-		// 有问题的设备整行染色，读者扫一眼概览表就知道该盯哪几台。
-		fill, accent := [3]int{}, [3]int{}
-		if device.IssueCount > 0 {
-			fill, accent = pdfkit.ColorRose100, pdfkit.ColorDanger
-		}
-		overviewFills = append(overviewFills, fill)
-		overviewAccents = append(overviewAccents, accent)
-	}
-	overviewStyle := defaultPDFTableStyle(pdfHeaderStyleBlue)
-	overviewStyle.BodyAlign = "C"
-	overviewStyle.RowFills = overviewFills
-	overviewStyle.RowAccents = overviewAccents
-	pdfkit.GridTable(pdf, []string{"设备名称", "IP地址", "类型", "状态", "通过率", "问题"}, overviewRows, []float64{35, 28, 25, 24, 24, 18}, overviewStyle)
+	writeInspectionDeviceOverviewTable(pdf, data.Devices)
 	pdf.Ln(9)
 
 	for deviceIdx, device := range data.Devices {
@@ -145,53 +124,7 @@ func writeInspectionPDF(path string, data InspectionReportData) error {
 		pdfkit.Bookmark(pdf, deviceBookmarkLabel(device), 1)
 		toc.markDevice(deviceIdx, pdf.PageNo())
 		writePDFSubSectionTitle(pdf, fmt.Sprintf("设备: %s", device.DeviceName))
-		deviceRows := [][]string{
-			{"IP地址", device.IPAddress},
-			{"设备类型", localizeDeviceType(device.DeviceType)},
-			{"厂商", localizeVendor(device.Vendor)},
-			{"型号", device.Model},
-			{"软件版本", device.SoftwareVersion},
-			{"补丁版本", resolveDevicePatchVersion(device)},
-			{"运行时长", device.Uptime},
-			{"最近巡检", device.LastInspectionTime},
-			{"巡检状态", localizeStatusWord(device.InspectionStatus)},
-			{"通过率", formatPercent(device.PassRate, 1)},
-			{"问题数量", fmt.Sprintf("%d", device.IssueCount)},
-		}
-		deviceStyle := defaultPDFTableStyle(pdfHeaderStyleLight)
-		deviceStyle.TableAlign = "L"
-		pdfkit.GridTable(pdf, []string{"属性", "值"}, deviceRows, []float64{45.7, 91.4}, deviceStyle)
-		if len(device.CheckResults) > 0 {
-			pdf.Ln(5)
-			resultRows := make([][]string, 0, len(device.CheckResults))
-			for idx, result := range device.CheckResults {
-				if idx >= pdfMaxDeviceCheckRows {
-					resultRows = append(resultRows, []string{"已截断", fmt.Sprintf("仅展示前%d条检查结果", pdfMaxDeviceCheckRows), "", "", ""})
-					break
-				}
-				resultRows = append(resultRows, []string{
-					result.CheckItemName,
-					localizeProtocolTerm(result.CheckItemType),
-					localizeStatusWord(result.Status),
-					fallbackPDFValue(result.ExpectedValue),
-					result.ActualValue,
-				})
-			}
-			resultStyle := defaultPDFTableStyle(pdfHeaderStyleBlue)
-			resultStyle.BodyAlign = "L"
-			// "参考标准"（index 3）与"实际值"（index 4）都可能是长文本
-			//（阈值区间说明 / 原始采集输出），启用换行完整展示，不截断。
-			resultStyle.WrapColumns = []int{3, 4}
-			// 明细表里的异常行同样染色，与前置异常清单形成呼应。
-			resultStyle.RowFills, resultStyle.RowAccents = checkResultRowTints(resultRows, 2)
-			pdfkit.GridTable(pdf, []string{"检查项", "类型", "状态", "参考标准", "实际值"}, resultRows, []float64{38, 16, 13, 37, 38.2}, resultStyle)
-
-			// 明细型检查项各自出一张表：上表的定宽单元格塞不下长清单，
-			// 也无法承载逐项的原始值与判定依据。
-			for _, result := range device.CheckResults {
-				writeCheckDetailTables(pdf, result)
-			}
-		}
+		writeInspectionDeviceProfileAndChecks(pdf, device)
 		pdf.Ln(10)
 	}
 
@@ -763,7 +696,7 @@ func writeInterfaceUtilizationPDFTable(pdf *gofpdf.Fpdf, result InspectionCheckR
 				percent = "<0.01%"
 			}
 			rows = append(rows, []string{
-				entry.Name,
+				formatInterfaceWithAlias(entry.Name, entry.Alias),
 				entry.Direction,
 				percent,
 				fmt.Sprintf("%d Mbps", entry.SpeedMbps),
@@ -776,7 +709,7 @@ func writeInterfaceUtilizationPDFTable(pdf *gofpdf.Fpdf, result InspectionCheckR
 		style.WrapColumns = []int{0}
 		pdfkit.GridTable(pdf,
 			[]string{"接口", "峰值方向", "利用率", "带宽容量", "入向速率", "出向速率"},
-			rows, []float64{40, 18, 20, 22, 21.2, 21}, style)
+			rows, []float64{50, 18, 20, 22, 22, 22}, style)
 	}
 
 	if len(detail.Skipped) > 0 {
@@ -804,6 +737,9 @@ func writeCheckDetailTables(pdf *gofpdf.Fpdf, result InspectionCheckResult) {
 	writeDiskUsagePDFTable(pdf, result)
 	writeLLDPNeighborsPDFTable(pdf, result)
 	writePoEPDFTable(pdf, result)
+	writeStackStatusPDFTable(pdf, result)
+	writeInterfaceStatusDetailPDFTable(pdf, result)
+	writeFlashUsagePDFTable(pdf, result)
 }
 
 // writeLLDPNeighborsPDFTable 为「LLDP 邻居状态」输出逐邻居拓扑明细表。
@@ -874,7 +810,7 @@ func writePoEPDFTable(pdf *gofpdf.Fpdf, result InspectionCheckResult) {
 			peak = fmt.Sprintf("%.1f%s", *port.PeakPower, unit)
 		}
 		rows = append(rows, []string{
-			port.Index,
+			fallbackPDFValue(firstNonEmptyString(port.Name, port.Index)),
 			consuming,
 			peak,
 		})
@@ -1002,7 +938,7 @@ func writeInterfaceRatioPDFTable(pdf *gofpdf.Fpdf, result InspectionCheckResult)
 		rows := make([][]string, 0, len(detail.Interfaces))
 		for _, entry := range detail.Interfaces {
 			rows = append(rows, []string{
-				entry.Name,
+				formatInterfaceWithAlias(entry.Name, entry.Alias),
 				entry.Direction,
 				formatDetailPercent(entry.Percent),
 				fmt.Sprintf("%d", entry.Count),
@@ -1022,54 +958,10 @@ func writeInterfaceRatioPDFTable(pdf *gofpdf.Fpdf, result InspectionCheckResult)
 		}
 		pdfkit.GridTable(pdf,
 			[]string{"接口", "峰值方向", ratioHeader, countHeader, packetsHeader},
-			rows, []float64{46, 20, 22, 27, 27.2}, style)
+			rows, []float64{54, 20, 22, 27, 27}, style)
 	}
 
 	writeDetailSkippedPDFTable(pdf, "未评估接口", detail.Skipped)
-}
-
-// writeOpticalPowerPDFTable 为「光模块光功率」输出逐模块明细表。
-//
-// 电压与偏置电流一并列出，是为了区分光衰的两种成因：偏置电流升高而发光下降
-// 指向激光器老化（换模块），否则指向链路侧衰耗（查光纤）。
-func writeOpticalPowerPDFTable(pdf *gofpdf.Fpdf, result InspectionCheckResult) {
-	detail := result.OpticalPower
-	if detail == nil || (len(detail.Modules) == 0 && len(detail.Skipped) == 0) {
-		return
-	}
-
-	pdf.Ln(4)
-	ensurePDFSpace(pdf, 40)
-	writePDFSubSectionTitle(pdf, fmt.Sprintf("%s - 逐模块明细（已评估 %d/%d，警告线 %sdBm，故障线 %sdBm）",
-		result.CheckItemName, detail.Evaluated, detail.Total,
-		formatFloat(detail.WarningThreshold, 1), formatFloat(detail.CriticalThreshold, 1)))
-
-	if len(detail.Modules) > 0 {
-		rows := make([][]string, 0, len(detail.Modules))
-		for _, module := range detail.Modules {
-			unit := module.RxPowerUnit
-			if unit == "" {
-				unit = "dBm"
-			}
-			rows = append(rows, []string{
-				module.Index,
-				localizeStatusWord(module.Verdict),
-				formatFloat(module.RxPower, 1) + unit,
-				formatOptionalFloat(module.TxPower, module.TxPowerUnit, 1),
-				formatOptionalFloat(module.Voltage, module.VoltageUnit, 2),
-				formatOptionalFloat(module.BiasCurrent, module.BiasCurrentUnit, 1),
-			})
-		}
-		style := defaultPDFTableStyle(pdfHeaderStyleBlue)
-		style.BodyAlign = "L"
-		style.WrapColumns = []int{0}
-		style.RowFills, style.RowAccents = checkResultRowTints(rows, 1)
-		pdfkit.GridTable(pdf,
-			[]string{"模块", "判定", "收光", "发光", "电压", "偏置电流"},
-			rows, []float64{36, 16, 22, 22, 22, 24.2}, style)
-	}
-
-	writeDetailSkippedPDFTable(pdf, "未评估模块", detail.Skipped)
 }
 
 // writeBGPPeersPDFTable 为「BGP 邻居状态」输出逐邻居明细表。
@@ -1131,44 +1023,6 @@ func formatBGPPeerState(peer BGPPeerEntryReport) string {
 		return fmt.Sprintf("状态码 %d", *peer.State)
 	}
 	return pdfEmptyValuePlaceholder
-}
-
-// writeComponentStatusPDFTable 为「风扇 / 电源状态」输出逐部件明细表。
-//
-// 表尾附上本次生效的状态码集合：状态码语义因厂商甚至型号而异，
-// 报告只说「码 77 未知」运维无从下手，给出判定依据才能据此校准模板配置。
-func writeComponentStatusPDFTable(pdf *gofpdf.Fpdf, result InspectionCheckResult) {
-	detail := result.ComponentStatus
-	if detail == nil || len(detail.Components) == 0 {
-		return
-	}
-
-	label := strings.TrimSpace(detail.Label)
-	if label == "" {
-		label = "部件"
-	}
-
-	pdf.Ln(4)
-	ensurePDFSpace(pdf, 40)
-	writePDFSubSectionTitle(pdf, fmt.Sprintf("%s - 逐%s明细（共 %d 个，正常 %d，异常 %d，状态码未知 %d）",
-		result.CheckItemName, label, detail.Total, detail.Normal, detail.Abnormal, detail.Unknown))
-
-	rows := make([][]string, 0, len(detail.Components))
-	for _, component := range detail.Components {
-		state := pdfEmptyValuePlaceholder
-		if component.State != nil {
-			state = fmt.Sprintf("%d", *component.State)
-		}
-		rows = append(rows, []string{component.Index, localizeStatusWord(component.Verdict), state})
-	}
-	style := defaultPDFTableStyle(pdfHeaderStyleBlue)
-	style.BodyAlign = "L"
-	style.WrapColumns = []int{0}
-	style.RowFills, style.RowAccents = checkResultRowTints(rows, 1)
-	pdfkit.GridTable(pdf, []string{"编号", "判定", "原始状态码"}, rows, []float64{50, 40, 52.2}, style)
-
-	writePDFRightAligned(pdf, fmt.Sprintf("判定依据：正常状态码 %s，异常状态码 %s，其余不作判定",
-		formatStateCodeSet(detail.NormalStates), formatStateCodeSet(detail.AbnormalStates)))
 }
 
 // formatStateCodeSet 把状态码集合渲染成 "1、2" 形式。
@@ -1376,7 +1230,7 @@ func collectInspectionIssues(data InspectionReportData) []inspectionIssue {
 				CheckName:  fallbackPDFValue(result.CheckItemName),
 				CheckType:  strings.TrimSpace(result.CheckItemType),
 				Expected:   fallbackPDFValue(result.ExpectedValue),
-				Actual:     fallbackPDFValue(result.ActualValue),
+				Actual:     formatCheckResultActualWithMessage(result, true),
 			})
 		}
 	}
@@ -1812,6 +1666,12 @@ func inspectionRemediation(checkName, checkType string) string {
 		return "确认风扇模块运行状态与告警指示；单风扇故障应尽快更换备件，避免散热余量不足引发连锁高温。"
 	case contains("电源", "power", "psu"):
 		return "核查双电源冗余是否失效、市电与 PDU 供电是否正常；单电源运行状态下须尽快恢复冗余。"
+	case contains("单板", "board"):
+		return "检查告警槽位单板在位状态与物理故障指示灯；必要时确认单板供电、版本兼容性并联系现场排查或更换备板。"
+	case contains("堆叠", "stack", "irf"):
+		return "立即核查堆叠线缆与物理堆叠口链路状态，确认堆叠成员主备角色及分裂检测（MAD）机制正常，防止脑裂引发业务中断。"
+	case contains("flash", "存储空间"):
+		return "清理 Flash 中冗余的历史镜像补丁、临时日志与无效包文件，确保保留足够可用空间以支撑配置保存与后续版本升级。"
 	case contains("连通", "ping", "icmp", "可达"):
 		return "确认设备电源与上联链路状态，检查中间链路 ACL / 防火墙策略与路由是否变更；持续不可达需现场确认设备是否宕机。"
 	case contains("利用率", "带宽", "utilization", "bandwidth"):
@@ -1824,6 +1684,8 @@ func inspectionRemediation(checkName, checkType string) string {
 		return "检查设备全局与端口 LLDP 协议是否开启，核对对端交换机/路由器连线与配置；若邻居缺失需排查物理链路或对端 LLDP 发送配置。"
 	case contains("stp", "生成树", "dot1d"):
 		return "生成树近期发生拓扑重算；排查二层网络是否存在频繁 up/down 的抖动链路、环路或非根桥抢占，检查边缘端口是否配置 edge-port/portfast 与 BPDU 保护。"
+	case contains("vlan", "转发表"):
+		return "核对业务 VLAN 划分与 MAC 转发表容量使用率；清理僵尸静态表项并排查二层地址泛洪或异常学习源，避免表项耗尽引发泛洪。"
 	case contains("非单播", "广播", "nucast", "broadcast", "multicast", "风暴"):
 		return "查看「逐接口明细」定位非单播包占比较高的端口；排查二层环路、ARP/DHCP 泛洪或组播源异常，建议在接入端口配置风暴抑制（Storm Control）与端口安全。"
 	case contains("双工", "duplex", "半双工"):
@@ -1834,6 +1696,8 @@ func inspectionRemediation(checkName, checkType string) string {
 		return "重点排查物理链路质量：更换光模块或跳线，核对双工与速率协商，必要时联系线路提供商检测。"
 	case contains("运行时长", "uptime", "重启", "reboot"):
 		return "运行时长过短说明设备近期重启，需查看日志确认是否为异常掉电、看门狗复位或版本升级，排除非计划重启。"
+	case contains("配置保存", "未保存", "config_save"):
+		return "设备存在已修改但未保存到启动配置的变更；请立即登录设备核对近期配置修改并执行保存（如 save / write memory），防止异常掉电后配置回退。"
 	case contains("配置", "config"):
 		return "对比当前配置与基线，确认变更是否经过审批；及时执行配置保存与备份，防止掉电丢失。"
 	case contains("版本", "version", "firmware"):

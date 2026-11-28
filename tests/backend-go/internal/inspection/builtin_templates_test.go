@@ -65,6 +65,8 @@ func TestBuiltinCheckItems_ExecutableAndMetricValid(t *testing.T) {
 		"fan_status": true, "power_status": true, "poe": true,
 		"optical_power": true, "bgp_peers": true, "firmware_version": true,
 		"lldp_neighbors": true, "stp_status": true,
+		"board_status": true, "stack_status": true, "config_save_status": true,
+		"vlan_status": true, "flash_usage": true,
 		// 主机专项（HOST-RESOURCES-MIB）
 		"disk_usage": true,
 	}
@@ -91,6 +93,7 @@ func TestBuiltinCheckItems_ExecutableAndMetricValid(t *testing.T) {
 		"interface_broadcast",
 		"fan_status", "power_status", "poe", "optical_power", "bgp_peers", "firmware_version",
 		"lldp_neighbors", "stp_status",
+		"board_status", "stack_status", "config_save_status", "vlan_status", "flash_usage",
 		"disk_usage",
 	}
 	got := map[string]bool{}
@@ -179,18 +182,28 @@ func TestBuiltinMetricsForDeviceType_PerTypeDesign(t *testing.T) {
 	}{
 		{
 			deviceType: "switch",
-			required:   append(append([]string{}, networkHardware...), "interface_duplex", "poe", "lldp_neighbors", "stp_status", "interface_broadcast"),
-			forbidden:  []string{"bgp_peers", "bandwidth", "disk_usage"},
+			required: append(
+				append([]string{}, networkHardware...),
+				"interface_duplex", "poe", "lldp_neighbors", "stp_status", "interface_broadcast",
+				"board_status", "stack_status", "config_save_status", "vlan_status", "flash_usage",
+			),
+			forbidden: []string{"bgp_peers", "bandwidth", "disk_usage"},
 		},
 		{
 			deviceType: "router",
 			required:   append(append([]string{}, networkHardware...), "bgp_peers", "bandwidth"),
-			forbidden:  []string{"poe", "interface_duplex", "disk_usage", "lldp_neighbors", "stp_status", "interface_broadcast"},
+			forbidden: []string{
+				"poe", "interface_duplex", "disk_usage", "lldp_neighbors", "stp_status", "interface_broadcast",
+				"board_status", "stack_status", "config_save_status", "vlan_status", "flash_usage",
+			},
 		},
 		{
 			deviceType: "firewall",
 			required:   append(append([]string{}, networkHardware...), "bgp_peers", "bandwidth"),
-			forbidden:  []string{"poe", "interface_duplex", "disk_usage", "lldp_neighbors", "stp_status", "interface_broadcast"},
+			forbidden: []string{
+				"poe", "interface_duplex", "disk_usage", "lldp_neighbors", "stp_status", "interface_broadcast",
+				"board_status", "stack_status", "config_save_status", "vlan_status", "flash_usage",
+			},
 		},
 		{
 			deviceType: "server",
@@ -199,6 +212,7 @@ func TestBuiltinMetricsForDeviceType_PerTypeDesign(t *testing.T) {
 				"temperature", "fan_status", "power_status", "optical_power", "firmware_version",
 				"poe", "interface_duplex", "bgp_peers", "bandwidth",
 				"lldp_neighbors", "stp_status", "interface_broadcast",
+				"board_status", "stack_status", "config_save_status", "vlan_status", "flash_usage",
 			},
 		},
 	}
@@ -263,14 +277,14 @@ func TestBuiltinTemplates_ServerThresholds(t *testing.T) {
 	}
 }
 
-// TestBuiltinTemplates_SwitchHas20Items 校验「交换机巡检」模板包含全部 20 项检查项
-func TestBuiltinTemplates_SwitchHas20Items(t *testing.T) {
+// TestBuiltinTemplates_SwitchHas25Items 校验「交换机巡检」模板包含全部 25 项检查项
+func TestBuiltinTemplates_SwitchHas25Items(t *testing.T) {
 	for _, s := range decodeBuiltinSeeds(t) {
 		if s.Name != "交换机巡检" {
 			continue
 		}
-		if len(s.CheckItems) != 20 {
-			t.Fatalf("交换机巡检应包含 20 个检查项，实际 %d", len(s.CheckItems))
+		if len(s.CheckItems) != 25 {
+			t.Fatalf("交换机巡检应包含 25 个检查项，实际 %d", len(s.CheckItems))
 		}
 		metrics := map[string]bool{}
 		for _, item := range s.CheckItems {
@@ -278,7 +292,10 @@ func TestBuiltinTemplates_SwitchHas20Items(t *testing.T) {
 				metrics[m] = true
 			}
 		}
-		for _, want := range []string{"lldp_neighbors", "stp_status", "interface_broadcast"} {
+		for _, want := range []string{
+			"lldp_neighbors", "stp_status", "interface_broadcast",
+			"board_status", "stack_status", "config_save_status", "vlan_status", "flash_usage",
+		} {
 			if !metrics[want] {
 				t.Errorf("交换机巡检模板缺少新项 metric=%q", want)
 			}
@@ -286,4 +303,25 @@ func TestBuiltinTemplates_SwitchHas20Items(t *testing.T) {
 		return
 	}
 	t.Fatal("未找到交换机巡检模板")
+}
+
+// TestBuiltinTemplates_AllPassTemplateValidator 验证全部 4 个内置模板（特别是包含反向阈值的交换机模板）
+// 均可通过 TemplateValidator.ValidateCheckItems 校验。
+func TestBuiltinTemplates_AllPassTemplateValidator(t *testing.T) {
+	var seeds []struct {
+		Name       string                 `json:"name"`
+		CheckItems []inspection.CheckItem `json:"check_items"`
+	}
+	if err := json.Unmarshal(builtinTemplateSeedsJSON(), &seeds); err != nil {
+		t.Fatalf("内置模板种子 JSON 解码失败: %v", err)
+	}
+
+	validator := inspection.NewTemplateValidator(nil)
+	for _, seed := range seeds {
+		t.Run(seed.Name, func(t *testing.T) {
+			if err := validator.ValidateCheckItems(seed.CheckItems); err != nil {
+				t.Fatalf("内置模板 %q 未通过 TemplateValidator 校验: %v", seed.Name, err)
+			}
+		})
+	}
 }

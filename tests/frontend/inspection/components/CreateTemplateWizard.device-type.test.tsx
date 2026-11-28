@@ -1,7 +1,7 @@
 import React from 'react'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { CreateTemplateWizard } from '@/features/inspection/components/CreateTemplateWizard'
+import { CreateTemplateWizard, isLowerBoundedMetric } from '@/features/inspection/components/CreateTemplateWizard'
 import * as inspectionHooks from '@/features/inspection/hooks/useInspection'
 import type { InspectionTemplate } from '@/features/inspection/types'
 
@@ -187,5 +187,75 @@ describe('CreateTemplateWizard 检查项', () => {
         expect.not.objectContaining({ config: expect.objectContaining({ threshold: expect.anything() }) }),
       ],
     }))
+  })
+
+  it('isLowerBoundedMetric 仅对 poe / optical_power / stp_status 返回 true', () => {
+    expect(isLowerBoundedMetric('poe')).toBe(true)
+    expect(isLowerBoundedMetric('optical_power')).toBe(true)
+    expect(isLowerBoundedMetric('stp_status')).toBe(true)
+    expect(isLowerBoundedMetric(' PoE ')).toBe(true)
+    expect(isLowerBoundedMetric('cpu')).toBe(false)
+    expect(isLowerBoundedMetric('flash_usage')).toBe(false)
+    expect(isLowerBoundedMetric(undefined)).toBe(false)
+  })
+
+  it('下限型指标（PoE/光功率/STP）应提示并校验警告阈值大于严重阈值，常规指标保持小于校验', async () => {
+    const user = userEvent.setup()
+    render(<CreateTemplateWizard onClose={jest.fn()} onSuccess={jest.fn()} />)
+    await gotoCheckItemStep(user)
+
+    await user.click(screen.getByRole('button', { name: /添加检查项/ }))
+    await user.type(screen.getByPlaceholderText('例如：CPU 使用率'), 'PoE 供电')
+
+    // 常规态默认提示“警告阈值应小于严重阈值”
+    expect(screen.getByText('警告阈值应小于严重阈值')).toBeInTheDocument()
+
+    // 切换为 poe 指标后提示变为反向阈值语义
+    await user.click(screen.getByRole('combobox', { name: '采集指标' }))
+    await user.click(screen.getByRole('option', { name: /PoE 供电余量/ }))
+    expect(screen.getByText('该指标数值越低越危险，警告阈值应大于严重阈值')).toBeInTheDocument()
+
+    const warningInput = screen.getByLabelText('警告阈值')
+    const criticalInput = screen.getByLabelText('严重阈值')
+
+    // 反向指标填 warning <= critical 应阻断
+    await user.type(warningInput, '10')
+    await user.type(criticalInput, '30')
+    await user.click(screen.getByRole('button', { name: /下一步/ }))
+    expect(screen.getByText('该指标数值越低越危险，警告阈值必须大于严重阈值')).toBeInTheDocument()
+
+    // 改为 warning > critical (30 > 10) 应放行
+    await user.clear(warningInput)
+    await user.clear(criticalInput)
+    await user.type(warningInput, '30')
+    await user.type(criticalInput, '10')
+    await user.click(screen.getByRole('button', { name: /下一步/ }))
+    await user.click(screen.getByRole('button', { name: /创建模板/ }))
+
+    expect(create).toHaveBeenCalledWith(expect.objectContaining({
+      checkItems: [
+        expect.objectContaining({
+          metric: 'poe',
+          config: expect.objectContaining({ threshold: { warning: 30, critical: 10 } }),
+        }),
+      ],
+    }))
+  })
+
+  it('常规指标警告阈值大于等于严重阈值时仍阻断保存', async () => {
+    const user = userEvent.setup()
+    render(<CreateTemplateWizard onClose={jest.fn()} onSuccess={jest.fn()} />)
+    await gotoCheckItemStep(user)
+
+    await user.click(screen.getByRole('button', { name: /添加检查项/ }))
+    await user.type(screen.getByPlaceholderText('例如：CPU 使用率'), '系统盘')
+    await user.click(screen.getByRole('combobox', { name: '采集指标' }))
+    await user.click(screen.getByRole('option', { name: /磁盘使用率/ }))
+
+    await user.type(screen.getByLabelText('警告阈值'), '90')
+    await user.type(screen.getByLabelText('严重阈值'), '80')
+    await user.click(screen.getByRole('button', { name: /下一步/ }))
+
+    expect(screen.getByText('警告阈值必须小于严重阈值')).toBeInTheDocument()
   })
 })

@@ -42,6 +42,15 @@ func parsePoEDetails(raw *string) *reports.PoEReport
 //go:linkname parseFirmwareVersionDetails github.com/your-org/inspect-system/backend-go/internal/reports.parseFirmwareVersionDetails
 func parseFirmwareVersionDetails(raw *string) *reports.FirmwareVersionReport
 
+//go:linkname parseStackStatusDetails github.com/your-org/inspect-system/backend-go/internal/reports.parseStackStatusDetails
+func parseStackStatusDetails(raw *string) *reports.StackStatusReport
+
+//go:linkname parseInterfaceStatusDetailDetails github.com/your-org/inspect-system/backend-go/internal/reports.parseInterfaceStatusDetailDetails
+func parseInterfaceStatusDetailDetails(raw *string) *reports.InterfaceStatusDetailReport
+
+//go:linkname parseFlashUsageDetails github.com/your-org/inspect-system/backend-go/internal/reports.parseFlashUsageDetails
+func parseFlashUsageDetails(raw *string) *reports.FlashUsageReport
+
 //go:linkname resolveDevicePatchVersion github.com/your-org/inspect-system/backend-go/internal/reports.resolveDevicePatchVersion
 func resolveDevicePatchVersion(device reports.InspectionDeviceData) string
 
@@ -406,6 +415,117 @@ func TestParsePoEDetails_RejectsInvalidKind(t *testing.T) {
 	}
 }
 
+const stackStatusPayload = `{
+	"kind": "stack_status",
+	"enabled": true,
+	"standalone": false,
+	"topology": "ring",
+	"member_count": 2,
+	"port_up_count": 3,
+	"port_down_count": 1,
+	"members": [
+		{"id": "1", "role": "master", "priority": 200, "mac": "00-11-22-33-44-01", "verdict": "pass"},
+		{"id": "2", "role": "standby", "priority": 150, "mac": "00-11-22-33-44-02", "verdict": "pass"}
+	],
+	"ports": [
+		{"name": "Stack-Port1/1", "status": "up", "verdict": "pass"},
+		{"name": "Stack-Port2/2", "status": "down", "verdict": "fail"}
+	]
+}`
+
+const interfaceStatusDetailPayload = `{
+	"kind": "interface_status_detail",
+	"sub_kind": "duplex",
+	"total_evaluated": 24,
+	"abnormal_count": 1,
+	"entries": [
+		{
+			"name": "GigabitEthernet0/0/12",
+			"alias": "To-Floor-AP-01",
+			"speed_mbps": 1000,
+			"status_label": "up",
+			"duplex_label": "half-duplex",
+			"verdict": "warning",
+			"reason": "高速口协商为半双工"
+		}
+	]
+}`
+
+const flashUsagePayload = `{
+	"kind": "flash_usage",
+	"total": 3,
+	"evaluated": 2,
+	"over_warning": 1,
+	"over_critical": 0,
+	"warning_threshold": 80,
+	"critical_threshold": 90,
+	"partitions": [
+		{"name": "flash:/", "total_bytes": 1073741824, "used_bytes": 891289600, "free_bytes": 182452224, "percent": 83.0, "verdict": "warning"},
+		{"name": "slot2#flash:/", "total_bytes": 1073741824, "used_bytes": 214748364, "free_bytes": 858993459, "percent": 20.0, "verdict": "pass"}
+	],
+	"skipped": [{"name": "usb0:/", "reason": "未插拔或容量为 0"}],
+	"metric": "flash_usage",
+	"threshold": {"warning": 80, "critical": 90, "unit": "%"}
+}`
+
+func TestParseSwitchExtendedDetails_StackInterfaceFlash(t *testing.T) {
+	t.Run("stack_status", func(t *testing.T) {
+		var result reports.InspectionCheckResult
+		parseCheckResultDetails(rawJSON(stackStatusPayload), &result)
+		if result.StackStatus == nil {
+			t.Fatal("stack_status 应分派到 StackStatus")
+		}
+		if result.StackStatus.Topology != "ring" || len(result.StackStatus.Members) != 2 || len(result.StackStatus.Ports) != 2 {
+			t.Fatalf("StackStatus 解析不完整: %+v", result.StackStatus)
+		}
+	})
+
+	t.Run("interface_status_detail", func(t *testing.T) {
+		var result reports.InspectionCheckResult
+		parseCheckResultDetails(rawJSON(interfaceStatusDetailPayload), &result)
+		if result.InterfaceStatusDetail == nil {
+			t.Fatal("interface_status_detail 应分派到 InterfaceStatusDetail")
+		}
+		if result.InterfaceStatusDetail.SubKind != "duplex" || len(result.InterfaceStatusDetail.Entries) != 1 {
+			t.Fatalf("InterfaceStatusDetail 解析不完整: %+v", result.InterfaceStatusDetail)
+		}
+		if result.InterfaceStatusDetail.Entries[0].Alias != "To-Floor-AP-01" {
+			t.Errorf("Alias = %q, want To-Floor-AP-01", result.InterfaceStatusDetail.Entries[0].Alias)
+		}
+	})
+
+	t.Run("flash_usage", func(t *testing.T) {
+		var result reports.InspectionCheckResult
+		parseCheckResultDetails(rawJSON(flashUsagePayload), &result)
+		if result.FlashUsage == nil {
+			t.Fatal("flash_usage 应分派到 FlashUsage")
+		}
+		if result.Threshold == nil || result.Threshold.Metric != "flash_usage" {
+			t.Errorf("FlashUsage 应同步带出 threshold: %+v", result.Threshold)
+		}
+		if len(result.FlashUsage.Partitions) != 2 || len(result.FlashUsage.Skipped) != 1 {
+			t.Fatalf("FlashUsage 分区/跳过数不符: %+v", result.FlashUsage)
+		}
+	})
+
+	t.Run("enhanced_existing_detail_fields", func(t *testing.T) {
+		rawOpt := `{"kind":"optical_power","total":1,"evaluated":1,"modules":[{"index":"101","name":"XGigabitEthernet0/0/1","vendor_sn":"SN123456","verdict":"warning","rx_power":-26.0,"rx_power_unit":"dBm","temperature":78.5,"temperature_unit":"C","verdict_reason":"模块温度偏高"}]}`
+		opt := parseOpticalPowerDetails(rawJSON(rawOpt))
+		if opt == nil || len(opt.Modules) != 1 {
+			t.Fatalf("optical_power 解析失败: %+v", opt)
+		}
+		if opt.Modules[0].Name != "XGigabitEthernet0/0/1" || opt.Modules[0].VendorSN != "SN123456" || opt.Modules[0].Temperature == nil || *opt.Modules[0].Temperature != 78.5 {
+			t.Errorf("光模块增强字段缺失: %+v", opt.Modules[0])
+		}
+
+		rawComp := `{"kind":"component_status","component_kind":"board","label":"单板","total":1,"normal":0,"abnormal":1,"components":[{"index":"1","name":"LPU-Slot1","kind":"board","verdict":"fail","state":3,"status_label":"故障灯告警"}]}`
+		comp := parseComponentStatusDetails(rawJSON(rawComp))
+		if comp == nil || len(comp.Components) != 1 || comp.Components[0].Name != "LPU-Slot1" || comp.Components[0].StatusLabel != "故障灯告警" {
+			t.Errorf("单板增强字段缺失: %+v", comp)
+		}
+	})
+}
+
 // ---------------------------------------------------------------------------
 // 脏数据容错
 // ---------------------------------------------------------------------------
@@ -447,6 +567,15 @@ func TestParseCheckDetails_TolerantToBadInput(t *testing.T) {
 			}
 			if got := parsePoEDetails(tc.raw); got != nil {
 				t.Errorf("parsePoEDetails 应返回 nil，实际 %v", got)
+			}
+			if got := parseStackStatusDetails(tc.raw); got != nil {
+				t.Errorf("parseStackStatusDetails 应返回 nil，实际 %v", got)
+			}
+			if got := parseInterfaceStatusDetailDetails(tc.raw); got != nil {
+				t.Errorf("parseInterfaceStatusDetailDetails 应返回 nil，实际 %v", got)
+			}
+			if got := parseFlashUsageDetails(tc.raw); got != nil {
+				t.Errorf("parseFlashUsageDetails 应返回 nil，实际 %v", got)
 			}
 		})
 	}
@@ -491,6 +620,18 @@ func inspectionDataWithDetailTables() reports.InspectionReportData {
 						CheckItemName: "PoE 供电状态", CheckItemType: "snmp", Status: "pass",
 						PoE: parsePoEDetails(rawJSON(poePayload)),
 					},
+					{
+						CheckItemName: "堆叠与集群状态", CheckItemType: "snmp", Category: "health", Status: "fail",
+						StackStatus: parseStackStatusDetails(rawJSON(stackStatusPayload)),
+					},
+					{
+						CheckItemName: "接口双工模式", CheckItemType: "snmp", Category: "performance", Status: "warning",
+						InterfaceStatusDetail: parseInterfaceStatusDetailDetails(rawJSON(interfaceStatusDetailPayload)),
+					},
+					{
+						CheckItemName: "Flash 存储使用率", CheckItemType: "snmp", Category: "health", Status: "warning",
+						FlashUsage: parseFlashUsageDetails(rawJSON(flashUsagePayload)),
+					},
 				},
 			},
 		},
@@ -513,6 +654,9 @@ func TestInspectionPDF_RendersDetailTables(t *testing.T) {
 		bare.Devices[0].CheckResults[i].ComponentStatus = nil
 		bare.Devices[0].CheckResults[i].LLDPNeighbors = nil
 		bare.Devices[0].CheckResults[i].PoE = nil
+		bare.Devices[0].CheckResults[i].StackStatus = nil
+		bare.Devices[0].CheckResults[i].InterfaceStatusDetail = nil
+		bare.Devices[0].CheckResults[i].FlashUsage = nil
 	}
 
 	fullSize := renderInspectionPDFSize(t, withDetails, "with-details.pdf")
@@ -520,6 +664,26 @@ func TestInspectionPDF_RendersDetailTables(t *testing.T) {
 
 	if fullSize <= bareSize {
 		t.Fatalf("带明细 PDF = %d 字节，不带明细 = %d 字节；明细表未被渲染", fullSize, bareSize)
+	}
+}
+
+func TestReconcileInspectionSummary_PopulatesCategoryStats(t *testing.T) {
+	data := inspectionDataWithDetailTables()
+	reconcileInspectionSummary(&data)
+	if len(data.CategoryStats) == 0 {
+		t.Fatal("reconcileInspectionSummary 应填充 CategoryStats")
+	}
+	foundHealth := false
+	for _, stat := range data.CategoryStats {
+		if stat.Category == "硬件与系统健康" {
+			foundHealth = true
+			if stat.Total == 0 {
+				t.Errorf("硬件与系统健康 Total 不应为 0")
+			}
+		}
+	}
+	if !foundHealth {
+		t.Errorf("CategoryStats 缺少「硬件与系统健康」: %+v", data.CategoryStats)
 	}
 }
 

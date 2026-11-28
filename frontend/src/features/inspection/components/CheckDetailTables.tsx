@@ -22,6 +22,7 @@ import type {
   OpticalPowerDetails,
   PoEDetails,
 } from '../types'
+import { SwitchCheckDetailTables } from './SwitchCheckDetailTables'
 import { cn } from '@/utils/cn'
 
 /** 判定词的中文标签，与检查结果状态共用一套词表 */
@@ -179,7 +180,10 @@ const InterfaceRatioTable = ({ details }: { details: InterfaceRatioDetails }) =>
         <DetailTable headers={['接口', '峰值方向', `${label}率`, `${label}数`, packetHeader]}>
           {details.interfaces.map((entry) => (
             <tr key={`${entry.name}-${entry.direction}`} className="border-b border-border/60 last:border-0">
-              <td className="py-1.5 pr-3 font-medium text-foreground/90 break-all">{entry.name}</td>
+              <td className="py-1.5 pr-3 font-medium text-foreground/90 break-all">
+                <div>{entry.name}</div>
+                {entry.alias && <div className="text-[11px] font-normal text-muted-foreground">{entry.alias}</div>}
+              </td>
               <td className="py-1.5 pr-3 text-muted-foreground whitespace-nowrap">{entry.direction}</td>
               <td
                 className={cn(
@@ -226,10 +230,18 @@ const OpticalPowerTable = ({ details }: { details: OpticalPowerDetails }) => {
       }）`}
     >
       {details.modules.length > 0 ? (
-        <DetailTable headers={['模块', '判定', '收光', '发光', '电压', '偏置电流']}>
+        <DetailTable headers={['端口/模块', 'SN', '判定', '收光', '发光', '温度', '电压', '偏置电流']}>
           {details.modules.map((module) => (
             <tr key={module.index} className="border-b border-border/60 last:border-0">
-              <td className="py-1.5 pr-3 font-medium text-foreground/90 break-all">{module.index}</td>
+              <td className="py-1.5 pr-3 font-medium text-foreground/90 break-all">
+                <div>{module.name || module.index}</div>
+                {module.name && module.name !== module.index && (
+                  <div className="text-[11px] font-normal text-muted-foreground">索引 {module.index}</div>
+                )}
+              </td>
+              <td className="py-1.5 pr-3 text-muted-foreground whitespace-nowrap font-mono">
+                {module.vendor_sn || EMPTY}
+              </td>
               <VerdictCell verdict={module.verdict} />
               <td className="py-1.5 pr-3 whitespace-nowrap tabular-nums font-medium">
                 {module.rx_power.toFixed(1)}
@@ -237,6 +249,9 @@ const OpticalPowerTable = ({ details }: { details: OpticalPowerDetails }) => {
               </td>
               <td className="py-1.5 pr-3 text-muted-foreground whitespace-nowrap tabular-nums">
                 {formatOptional(module.tx_power, module.tx_power_unit, 1)}
+              </td>
+              <td className="py-1.5 pr-3 text-muted-foreground whitespace-nowrap tabular-nums">
+                {formatOptional(module.temperature, module.temperature_unit ?? '°C', 1)}
               </td>
               <td className="py-1.5 pr-3 text-muted-foreground whitespace-nowrap tabular-nums">
                 {formatOptional(module.voltage, module.voltage_unit, 2)}
@@ -303,11 +318,15 @@ const ComponentStatusTable = ({ details }: { details: ComponentStatusDetails }) 
     <Disclosure
       summary={`${label}明细（共 ${details.total} 个，正常 ${details.normal}，异常 ${details.abnormal}，状态码未知 ${details.unknown}）`}
     >
-      <DetailTable headers={['编号', '判定', '原始状态码']}>
+      <DetailTable headers={['编号', '名称', '判定', '状态描述', '原始状态码']}>
         {details.components.map((component) => (
           <tr key={component.index} className="border-b border-border/60 last:border-0">
             <td className="py-1.5 pr-3 font-medium text-foreground/90 break-all">{component.index}</td>
+            <td className="py-1.5 pr-3 text-foreground/90 break-all">{component.name || EMPTY}</td>
             <VerdictCell verdict={component.verdict} />
+            <td className="py-1.5 pr-3 text-muted-foreground whitespace-nowrap">
+              {component.status_label || EMPTY}
+            </td>
             <td className="py-1.5 text-muted-foreground whitespace-nowrap tabular-nums">
               {component.state ?? EMPTY}
             </td>
@@ -475,7 +494,7 @@ const PoETable = ({ details }: { details: PoEDetails }) => {
           {sortedPorts.map((port) => (
             <tr key={port.index} className="border-b border-border/60 last:border-0">
               <td className="py-1.5 pr-3 font-medium text-foreground/90 whitespace-nowrap">
-                {port.index}
+                {port.name || port.index}
               </td>
               <td className="py-1.5 pr-3 text-foreground/90 whitespace-nowrap tabular-nums font-medium">
                 {formatOptional(port.consuming_power, port.unit || unit, 1)}
@@ -524,6 +543,10 @@ export function CheckDetailTables({ details }: CheckDetailTablesProps) {
       return <LLDPNeighborsTable details={details} />
     case 'poe':
       return <PoETable details={details} />
+    case 'stack_status':
+    case 'interface_status_detail':
+    case 'flash_usage':
+      return <SwitchCheckDetailTables details={details} />
     default:
       return null
   }

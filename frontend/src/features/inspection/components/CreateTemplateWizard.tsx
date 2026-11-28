@@ -170,6 +170,12 @@ const CHECK_TYPE_OPTIONS: {
 
 const OID_PATTERN = /^[0-9]+(\.[0-9]+)*$/
 
+/** 判断指标是否属于数值越低越危险的下限型指标（警告阈值必须大于严重阈值） */
+export const isLowerBoundedMetric = (metric?: string): boolean => {
+  const normalized = (metric ?? '').trim().toLowerCase()
+  return normalized === 'poe' || normalized === 'optical_power' || normalized === 'stp_status'
+}
+
 interface MetricOption {
   metric: string
   label: string
@@ -813,7 +819,11 @@ const CheckItemEditorInline: React.FC<CheckItemEditorInlineProps> = ({
                 </div>
                 <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1">
                   <Info className="w-3.5 h-3.5" />
-                  <span>警告阈值应小于严重阈值</span>
+                  <span>
+                    {isLowerBoundedMetric(item.metric)
+                      ? '该指标数值越低越危险，警告阈值应大于严重阈值'
+                      : '警告阈值应小于严重阈值'}
+                  </span>
                 </p>
               </div>
             </div>
@@ -1169,9 +1179,17 @@ export const CreateTemplateWizard: React.FC<Props> = ({
                     '警告阈值和严重阈值需同时填写，或全部留空'
                   break
                 }
-                if (hasWarning && hasCritical && warning >= critical) {
-                  newErrors.checkItems = '警告阈值必须小于严重阈值'
-                  break
+                if (warning !== undefined && critical !== undefined) {
+                  if (isLowerBoundedMetric(item.metric)) {
+                    if (warning <= critical) {
+                      newErrors.checkItems =
+                        '该指标数值越低越危险，警告阈值必须大于严重阈值'
+                      break
+                    }
+                  } else if (warning >= critical) {
+                    newErrors.checkItems = '警告阈值必须小于严重阈值'
+                    break
+                  }
                 }
               }
             }

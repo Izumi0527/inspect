@@ -321,13 +321,21 @@ func (v *templateValidator) ValidateCheckItem(item *CheckItem) error {
 		var threshold ThresholdConfig
 		// Convert map to threshold config
 		if thresholdMap, ok := thresholdData.(map[string]interface{}); ok {
-			if warning, ok := thresholdMap["warning"].(float64); ok {
+			if warning, ok := extractThresholdNumber(thresholdMap["warning"]); ok {
 				threshold.Warning = warning
 			}
-			if critical, ok := thresholdMap["critical"].(float64); ok {
+			if critical, ok := extractThresholdNumber(thresholdMap["critical"]); ok {
 				threshold.Critical = critical
 			}
-			if err := v.ValidateThreshold(&threshold); err != nil {
+			if IsLowerBoundedMetric(item.Metric) {
+				if threshold.Warning <= threshold.Critical {
+					return &ValidationError{
+						Field:   "config.threshold",
+						Message: fmt.Sprintf("该指标数值越低越危险，警告阈值 (%.2f) 必须大于严重告警阈值 (%.2f)", threshold.Warning, threshold.Critical),
+						Err:     ErrInvalidThreshold,
+					}
+				}
+			} else if err := v.ValidateThreshold(&threshold); err != nil {
 				return err
 			}
 		}
@@ -336,10 +344,34 @@ func (v *templateValidator) ValidateCheckItem(item *CheckItem) error {
 	return nil
 }
 
+// IsLowerBoundedMetric 判断给定 SNMP 指标是否属于“数值越低越危险”的下限型指标。
+// 此类指标的警告阈值必须严格大于严重告警阈值（例如 PoE 剩余功率、光功率、STP 距上次拓扑变更时间）。
+func IsLowerBoundedMetric(metric string) bool {
+	switch strings.ToLower(strings.TrimSpace(metric)) {
+	case "poe", "optical_power", "stp_status":
+		return true
+	default:
+		return false
+	}
+}
+
+func extractThresholdNumber(value interface{}) (float64, bool) {
+	switch v := value.(type) {
+	case float64:
+		return v, true
+	case int:
+		return float64(v), true
+	case int64:
+		return float64(v), true
+	default:
+		return 0, false
+	}
+}
+
 // ValidateCheckItemType validates the check item type
 // Validates: Requirement 12.4
 func (v *templateValidator) ValidateCheckItemType(itemType string) error {
-	validTypes := []string{"snmp", "ssh", "http", "ping", "script"}
+	validTypes := []string{"snmp", "ssh", "http", "ping", "icmp", "script"}
 	normalizedType := strings.ToLower(strings.TrimSpace(itemType))
 
 	for _, validType := range validTypes {
@@ -366,6 +398,7 @@ var validSNMPMetrics = []string{
 	// 硬件部件与专项（厂商 catalog 或标准协议，采不到时检查项判 skip）
 	"fan_status", "power_status", "poe", "optical_power", "bgp_peers", "firmware_version",
 	"lldp_neighbors", "stp_status",
+	"board_status", "stack_status", "config_save_status", "vlan_status", "flash_usage",
 	// 主机专项（HOST-RESOURCES-MIB，服务器模板使用）
 	"disk_usage",
 }

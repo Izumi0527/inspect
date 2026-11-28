@@ -36,7 +36,9 @@ type InspectionReportData struct {
 	// check_items 推导，两者同时为空表示覆盖范围不可得，渲染层须整段省略。
 	CoveredMetrics     []string
 	UncoveredMetrics   []string
+	GeneratedBy        string
 	GeneratedTimestamp string
+	CategoryStats      []InspectionCategoryStat
 }
 
 type InspectionSummaryStats struct {
@@ -170,6 +172,7 @@ func reconcileInspectionSummary(data *InspectionReportData) {
 	}
 
 	if totalDetails == 0 {
+		data.CategoryStats = nil
 		if data.SummaryStats.PassRate == 0 && data.SummaryStats.TotalChecks > 0 {
 			data.SummaryStats.PassRate = float64(data.SummaryStats.PassedChecks) / float64(data.SummaryStats.TotalChecks) * 100
 		}
@@ -181,6 +184,7 @@ func reconcileInspectionSummary(data *InspectionReportData) {
 		summary.PassRate = float64(summary.PassedChecks) / float64(evaluated) * 100
 	}
 	data.SummaryStats = summary
+	data.CategoryStats = computeInspectionCategoryStats(data.Devices)
 }
 
 type InspectionDeviceData struct {
@@ -189,6 +193,8 @@ type InspectionDeviceData struct {
 	DeviceType         string
 	Vendor             string
 	Model              string
+	SerialNumber       string
+	Location           string
 	SoftwareVersion    string
 	PatchVersion       string
 	Uptime             string
@@ -208,9 +214,11 @@ type InspectionPerformanceMetrics struct {
 type InspectionCheckResult struct {
 	CheckItemName string
 	CheckItemType string
+	Category      string
 	Status        string
 	ExpectedValue string
 	ActualValue   string
+	Message       string
 	ExecutionTime int
 	// 以下明细字段互斥，至多一个非空：details 列的载荷用顶层 kind 区分类型，
 	// 一条检查结果只会命中其中一种。渲染由 writeCheckDetailTables 统一分派。
@@ -223,7 +231,7 @@ type InspectionCheckResult struct {
 	OpticalPower *OpticalPowerReport
 	// BGPPeers 承载逐邻居状态与会话稳定性
 	BGPPeers *BGPPeersReport
-	// ComponentStatus 承载逐风扇/电源部件的原始状态码与判定
+	// ComponentStatus 承载逐风扇/电源/单板部件的原始状态码与判定
 	ComponentStatus *ComponentStatusReport
 	// DiskUsage 承载服务器逐分区磁盘使用率
 	DiskUsage *DiskUsageReport
@@ -233,6 +241,12 @@ type InspectionCheckResult struct {
 	PoE *PoEReport
 	// FirmwareVersion 承载型号、固件版本与补丁版本明细
 	FirmwareVersion *FirmwareVersionReport
+	// StackStatus 承载交换机堆叠成员与堆叠端口明细
+	StackStatus *StackStatusReport
+	// InterfaceStatusDetail 承载接口状态一致性 / 半双工异常明细
+	InterfaceStatusDetail *InterfaceStatusDetailReport
+	// FlashUsage 承载设备 Flash 存储分区使用率明细
+	FlashUsage *FlashUsageReport
 	// Threshold 本次实际生效的判定阈值，与上面明细正交——
 	// 带阈值的检查项无论有没有逐项明细，details 里都会带 threshold 字段。
 	// inspection_results 表没有阈值列，报告要说明「按什么口径判的」只能靠它。
@@ -250,6 +264,7 @@ type CheckThresholdReport struct {
 // InterfaceUtilizationEntryReport 报告中的单接口利用率行
 type InterfaceUtilizationEntryReport struct {
 	Name       string   `json:"name"`
+	Alias      string   `json:"alias"`
 	Direction  string   `json:"direction"`
 	Percent    float64  `json:"percent"`
 	SpeedMbps  int64    `json:"speed_mbps"`
@@ -338,6 +353,7 @@ func parseInterfaceUtilizationDetails(raw *string) *InterfaceUtilizationReport {
 // 一次性故障长期拉高，只看「1.2%」无法区分持续劣化与三年前的一次抖动。
 type InterfaceRatioEntryReport struct {
 	Name      string  `json:"name"`
+	Alias     string  `json:"alias"`
 	Direction string  `json:"direction"`
 	Percent   float64 `json:"percent"`
 	Count     uint64  `json:"count"`
@@ -404,11 +420,16 @@ func parseInterfaceRatioDetails(raw *string) *InterfaceRatioReport {
 // 否则报告会把「未上报电压」渲染成「电压 0V」这个明确错误的结论。
 type OpticalModuleEntryReport struct {
 	Index           string   `json:"index"`
+	Name            string   `json:"name"`
+	VendorSN        string   `json:"vendor_sn"`
 	Verdict         string   `json:"verdict"`
+	VerdictReason   string   `json:"verdict_reason"`
 	RxPower         float64  `json:"rx_power"`
 	RxPowerUnit     string   `json:"rx_power_unit"`
 	TxPower         *float64 `json:"tx_power"`
 	TxPowerUnit     string   `json:"tx_power_unit"`
+	Temperature     *float64 `json:"temperature"`
+	TemperatureUnit string   `json:"temperature_unit"`
 	Voltage         *float64 `json:"voltage"`
 	VoltageUnit     string   `json:"voltage_unit"`
 	BiasCurrent     *float64 `json:"bias_current"`
@@ -469,10 +490,12 @@ func parseBGPPeersDetails(raw *string) *BGPPeersReport {
 
 // ComponentStatusEntryReport 报告中的单部件行，State 保留厂商原始状态码。
 type ComponentStatusEntryReport struct {
-	Index   string `json:"index"`
-	Kind    string `json:"kind"`
-	Verdict string `json:"verdict"`
-	State   *int64 `json:"state"`
+	Index       string `json:"index"`
+	Name        string `json:"name"`
+	Kind        string `json:"kind"`
+	Verdict     string `json:"verdict"`
+	State       *int64 `json:"state"`
+	StatusLabel string `json:"status_label"`
 }
 
 // ComponentStatusReport 对应 details 中 kind=component_status 的载荷。
@@ -559,6 +582,7 @@ func parseLLDPNeighborsDetails(raw *string) *LLDPNeighborsReport {
 // PoEPortEntryReport 报告中的单个 PoE 端口供电行。
 type PoEPortEntryReport struct {
 	Index          string   `json:"index"`
+	Name           string   `json:"name"`
 	ConsumingPower *float64 `json:"consuming_power"`
 	PeakPower      *float64 `json:"peak_power"`
 	Unit           string   `json:"unit"`
@@ -698,6 +722,15 @@ func parseCheckResultDetails(raw *string, result *InspectionCheckResult) {
 	if result.PoE = parsePoEDetails(raw); result.PoE != nil {
 		return
 	}
+	if result.StackStatus = parseStackStatusDetails(raw); result.StackStatus != nil {
+		return
+	}
+	if result.InterfaceStatusDetail = parseInterfaceStatusDetailDetails(raw); result.InterfaceStatusDetail != nil {
+		return
+	}
+	if result.FlashUsage = parseFlashUsageDetails(raw); result.FlashUsage != nil {
+		return
+	}
 	result.ComponentStatus = parseComponentStatusDetails(raw)
 }
 
@@ -779,9 +812,13 @@ type GenericReportData struct {
 
 func buildInspectionReportData(ctx context.Context, db *gorm.DB, report Report, params map[string]interface{}) (InspectionReportData, error) {
 	loc := reportDisplayLocation(ctx, db)
+	creator := resolveReportCreatorName(ctx, db, report)
 	payload := findPayload(params, "inspection_data", "report_data")
 	if len(payload) > 0 {
 		data := parseInspectionReportPayload(payload)
+		if strings.TrimSpace(creator) != "" {
+			data.GeneratedBy = creator
+		}
 		reconcileInspectionSummary(&data)
 		data.GeneratedTimestamp = reportTimestampDisplay(data.GeneratedTimestamp, report, loc)
 		return data, nil
@@ -789,6 +826,9 @@ func buildInspectionReportData(ctx context.Context, db *gorm.DB, report Report, 
 	data, err := buildInspectionReportDataFromDB(ctx, db, report, params)
 	if err != nil {
 		return data, err
+	}
+	if strings.TrimSpace(creator) != "" {
+		data.GeneratedBy = creator
 	}
 	reconcileInspectionSummary(&data)
 	data.GeneratedTimestamp = reportTimestampDisplay(data.GeneratedTimestamp, report, loc)
@@ -856,6 +896,7 @@ func parseInspectionReportPayload(payload map[string]interface{}) InspectionRepo
 		InspectionID:   toString(payload["inspection_id"]),
 		InspectionTime: toString(payload["inspection_time"]),
 		Status:         toString(payload["status"]),
+		GeneratedBy:    toString(payload["generated_by"]),
 	}
 	data.ExecutionDuration = toInt(payload["execution_duration"])
 	data.GeneratedTimestamp = toString(payload["generated_at"])
@@ -884,6 +925,8 @@ func parseInspectionReportPayload(payload map[string]interface{}) InspectionRepo
 			DeviceType:         toString(deviceMap["device_type"]),
 			Vendor:             toString(deviceMap["vendor"]),
 			Model:              toString(deviceMap["model"]),
+			SerialNumber:       toString(deviceMap["serial_number"]),
+			Location:           toString(deviceMap["location"]),
 			SoftwareVersion:    toString(deviceMap["software_version"]),
 			PatchVersion:       toString(deviceMap["patch_version"]),
 			Uptime:             toString(deviceMap["uptime"]),
@@ -903,9 +946,11 @@ func parseInspectionReportPayload(payload map[string]interface{}) InspectionRepo
 			device.CheckResults = append(device.CheckResults, InspectionCheckResult{
 				CheckItemName: toString(resultMap["check_item_name"]),
 				CheckItemType: toString(resultMap["check_item_type"]),
+				Category:      firstNonEmptyString(toString(resultMap["category"]), toString(resultMap["check_item_category"])),
 				Status:        toString(resultMap["status"]),
 				ExpectedValue: toString(resultMap["expected_value"]),
 				ActualValue:   toString(resultMap["actual_value"]),
+				Message:       toString(resultMap["message"]),
 				ExecutionTime: toInt(resultMap["execution_time"]),
 			})
 		}
@@ -1653,6 +1698,8 @@ func buildInspectionReportDataFromDB(ctx context.Context, db *gorm.DB, report Re
 		DeviceType    *string    `gorm:"column:device_type"`
 		Vendor        *string    `gorm:"column:vendor"`
 		Model         *string    `gorm:"column:model"`
+		SerialNumber  *string    `gorm:"column:serial_number"`
+		Location      *string    `gorm:"column:location"`
 		Version       *string    `gorm:"column:firmware_version"`
 		Uptime        *int       `gorm:"column:uptime"`
 		CPUUsage      *float64   `gorm:"column:cpu_usage"`
@@ -1678,6 +1725,8 @@ func buildInspectionReportDataFromDB(ctx context.Context, db *gorm.DB, report Re
 		        COALESCE(i.device_snapshot->>'device_type', d.device_type) AS device_type,
 		        COALESCE(i.device_snapshot->>'vendor', d.vendor) AS vendor,
 		        COALESCE(i.device_snapshot->>'model', d.model) AS model,
+		        COALESCE(i.device_snapshot->>'serial_number', d.serial_number) AS serial_number,
+		        COALESCE(i.device_snapshot->>'location', d.location) AS location,
 		        COALESCE(i.device_snapshot->>'firmware_version', d.firmware_version) AS firmware_version,
 		        COALESCE((i.device_snapshot->>'uptime')::bigint, d.uptime) AS uptime,
 		        d.cpu_usage, d.memory_usage, (d.id IS NULL AND i.device_snapshot IS NULL) AS identity_lost,
@@ -1727,16 +1776,18 @@ func buildInspectionReportDataFromDB(ctx context.Context, db *gorm.DB, report Re
 		InspectionID int     `gorm:"column:inspection_id"`
 		Name         string  `gorm:"column:check_item_name"`
 		Type         string  `gorm:"column:check_item_type"`
+		Category     *string `gorm:"column:check_item_category"`
 		Status       string  `gorm:"column:status"`
 		Expected     *string `gorm:"column:expected_value"`
 		Actual       *string `gorm:"column:actual_value"`
+		Message      *string `gorm:"column:message"`
 		Execution    *int    `gorm:"column:execution_time"`
 		Details      *string `gorm:"column:details"`
 	}
 	results := make([]resultRow, 0)
 	if err := db.WithContext(ctx).
 		Table("inspection_results").
-		Select("inspection_id, check_item_name, check_item_type, status, expected_value, actual_value, execution_time, details").
+		Select("inspection_id, check_item_name, check_item_type, check_item_category, status, expected_value, actual_value, message, execution_time, details").
 		Where("inspection_id IN ?", inspectionIDs).
 		Order("inspection_id, id").
 		Scan(&results).Error; err != nil {
@@ -1748,9 +1799,11 @@ func buildInspectionReportDataFromDB(ctx context.Context, db *gorm.DB, report Re
 		result := InspectionCheckResult{
 			CheckItemName: row.Name,
 			CheckItemType: row.Type,
+			Category:      defaultStringPtr(row.Category),
 			Status:        row.Status,
 			ExpectedValue: defaultStringPtr(row.Expected),
 			ActualValue:   defaultStringPtr(row.Actual),
+			Message:       defaultStringPtr(row.Message),
 			ExecutionTime: defaultIntPtr(row.Execution),
 		}
 		parseCheckResultDetails(row.Details, &result)
@@ -1838,6 +1891,8 @@ func buildInspectionReportDataFromDB(ctx context.Context, db *gorm.DB, report Re
 			DeviceType:         defaultStringPtr(row.DeviceType),
 			Vendor:             defaultStringPtr(row.Vendor),
 			Model:              defaultStringPtr(row.Model),
+			SerialNumber:       defaultStringPtr(row.SerialNumber),
+			Location:           defaultStringPtr(row.Location),
 			SoftwareVersion:    defaultStringPtr(row.Version),
 			Uptime:             formatUptimeSeconds(row.Uptime),
 			LastInspectionTime: inspectedAt.Format("2006-01-02 15:04:05"),
@@ -2332,7 +2387,8 @@ func markDeletedInspectionDevice(device *InspectionDeviceData, deviceID int, ide
 	}
 	for _, field := range []*string{
 		&device.IPAddress, &device.DeviceType, &device.Vendor,
-		&device.Model, &device.SoftwareVersion, &device.PatchVersion, &device.Uptime,
+		&device.Model, &device.SerialNumber, &device.Location,
+		&device.SoftwareVersion, &device.PatchVersion, &device.Uptime,
 	} {
 		if strings.TrimSpace(*field) == "" {
 			*field = deletedDeviceField
